@@ -32,3 +32,10 @@ faiss/python/swigfaiss_sve.swig
 # Python package build outputs
 /dist/
 /*.egg-info/
+
+# MSYS2 pacman package tree (built on tags; not source)
+/packaging/msys2/src/
+/packaging/msys2/pkg/
+/packaging/msys2/prebuilt/
+/packaging/msys2/*.pkg.tar.zst
+/packaging/msys2/*.pkg.tar.zst.sig

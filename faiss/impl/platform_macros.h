@@ -32,6 +32,9 @@
 #define __PRETTY_FUNCTION__ __FUNCSIG__
 #endif // _MSC_VER
 
+#include <cerrno>
+#include <malloc.h>
+
 #define posix_memalign(p, a, s) \
     (((*(p)) = _aligned_malloc((s), (a))), *(p) ? 0 : errno)
 #define posix_memalign_free _aligned_free
@@ -101,7 +104,11 @@ inline int __builtin_clzll(uint64_t x) {
 
 #endif // _MSC_VER
 
+#if defined(_MSC_VER)
 #define FAISS_ALWAYS_INLINE __forceinline
+#else
+#define FAISS_ALWAYS_INLINE inline __attribute__((__always_inline__))
+#endif
 #else
 /*******************************************************
  * Linux and OSX

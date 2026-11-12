@@ -9,6 +9,7 @@ on:
       - main
     tags:
       - 'v*'
+      - '!v*-win'
 jobs:
   build-pull-request:
     uses: ./.github/workflows/build-pull-request.yml

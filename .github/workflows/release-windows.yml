@@ -1,0 +1,16 @@
+name: Release - Windows
+
+# Manual MSYS2 package build. Tags go through Release MSYS2 (release-msys.yml).
+
+on:
+  workflow_dispatch:
+
+run-name: Release - Windows - ${{ github.ref_name }}
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: MSYS2 UCRT64 package
+    uses: ./.github/workflows/x-windows.yml

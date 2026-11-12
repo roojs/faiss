@@ -1,0 +1,56 @@
+name: Watch upstream
+
+# Pull facebookresearch/faiss onto main. No release branches. When that pull
+# contains a version tag that does not already have a -win release, start
+# Release MSYS2 on main. A GITHUB_TOKEN push does not start other workflows,
+# so the release is dispatched here.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 7 * * *'
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  pull:
+    name: Pull upstream onto main
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Pull upstream and release a new tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/facebookresearch/faiss.git
+          git fetch upstream --tags
+          git checkout main
+          if ! git merge --ff-only upstream/main; then
+            git merge --no-edit upstream/main
+          fi
+          git push origin main
+
+          latest="$(git tag -l 'v*' --merged HEAD | grep -Ev -- '-win$' | sort -V | tail -1 || true)"
+          if [[ -z "${latest}" ]]; then
+            echo "no version tag on main"
+            exit 0
+          fi
+          echo "latest tag on main: ${latest}"
+          git push origin "refs/tags/${latest}:refs/tags/${latest}" || true
+          if gh release view "${latest}-win" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "${latest}-win already published"
+            exit 0
+          fi
+          gh workflow run release-msys.yml --repo "$GITHUB_REPOSITORY" --ref main -f "tag=${latest}"
+          echo "dispatched Release MSYS2 for ${latest}"

@@ -495,9 +495,7 @@ add_library(faiss_avx2 ${FAISS_SRC})
 if(NOT FAISS_OPT_LEVEL STREQUAL "avx2" AND NOT FAISS_OPT_LEVEL STREQUAL "avx512" AND NOT FAISS_OPT_LEVEL STREQUAL "avx512_spr")
   set_target_properties(faiss_avx2 PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
-if(NOT WIN32)
-  target_compile_options(faiss_avx2 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mpopcnt ${FAISS_BMI2_FLAGS}>)
-else()
+if(MSVC)
   # MSVC enables FMA with /arch:AVX2; no separate flags for F16C, POPCNT
   # Ref. FMA (under /arch:AVX2): https://docs.microsoft.com/en-us/cpp/build/reference/arch-x64
   # Ref. F16C (2nd paragraph): https://walbourn.github.io/directxmath-avx2/
@@ -505,6 +503,9 @@ else()
   target_compile_options(faiss_avx2 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/arch:AVX2>)
   # we need bigobj for the swig wrapper
   add_compile_options(/bigobj)
+else()
+  # MinGW is WIN32 but uses the GCC flags. /arch and /bigobj are MSVC-only.
+  target_compile_options(faiss_avx2 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mpopcnt ${FAISS_BMI2_FLAGS}>)
 endif()
 target_sources(faiss_avx2 PRIVATE ${FAISS_SIMD_AVX2_SRC})
 target_compile_definitions(faiss_avx2 PRIVATE COMPILE_SIMD_AVX2)
@@ -513,14 +514,15 @@ add_library(faiss_avx512 ${FAISS_SRC})
 if(NOT FAISS_OPT_LEVEL STREQUAL "avx512")
   set_target_properties(faiss_avx512 PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
-if(NOT WIN32)
-  # All modern CPUs support F, CD, VL, DQ, BW extensions.
-  # Ref: https://en.wikipedia.org/wiki/AVX512
-  target_compile_options(faiss_avx512 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mpopcnt ${FAISS_BMI2_FLAGS}>)
-else()
+if(MSVC)
   target_compile_options(faiss_avx512 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/arch:AVX512>)
   # we need bigobj for the swig wrapper
   add_compile_options(/bigobj)
+else()
+  # All modern CPUs support F, CD, VL, DQ, BW extensions.
+  # Ref: https://en.wikipedia.org/wiki/AVX512
+  # MinGW is WIN32 but uses the GCC flags. /arch and /bigobj are MSVC-only.
+  target_compile_options(faiss_avx512 PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mpopcnt ${FAISS_BMI2_FLAGS}>)
 endif()
 target_sources(faiss_avx512 PRIVATE ${FAISS_SIMD_AVX2_SRC} ${FAISS_SIMD_AVX512_SRC})
 target_compile_definitions(faiss_avx512 PRIVATE COMPILE_SIMD_AVX2 COMPILE_SIMD_AVX512)
@@ -529,14 +531,15 @@ add_library(faiss_avx512_spr ${FAISS_SRC})
 if(NOT FAISS_OPT_LEVEL STREQUAL "avx512_spr")
   set_target_properties(faiss_avx512_spr PROPERTIES EXCLUDE_FROM_ALL TRUE)
 endif()
-if(NOT WIN32)
-  # Architecture mode to support AVX512 extensions available since Intel(R) Sapphire Rapids.
-  # Ref: https://networkbuilders.intel.com/solutionslibrary/intel-avx-512-fp16-instruction-set-for-intel-xeon-processor-based-products-technology-guide
-  target_compile_options(faiss_avx512_spr PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mavx512vnni -mavx512vpopcntdq -mavx512bitalg -mpopcnt -mavx512fp16 -mavx512bf16 -mprefer-vector-width=512 ${FAISS_BMI2_FLAGS}>)
-else()
+if(MSVC)
   target_compile_options(faiss_avx512_spr PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/arch:AVX512>)
   # we need bigobj for the swig wrapper
   add_compile_options(/bigobj)
+else()
+  # Architecture mode to support AVX512 extensions available since Intel(R) Sapphire Rapids.
+  # Ref: https://networkbuilders.intel.com/solutionslibrary/intel-avx-512-fp16-instruction-set-for-intel-xeon-processor-based-products-technology-guide
+  # MinGW is WIN32 but uses the GCC flags. /arch and /bigobj are MSVC-only.
+  target_compile_options(faiss_avx512_spr PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-mavx2 -mfma -mf16c -mavx512f -mavx512cd -mavx512vl -mavx512dq -mavx512bw -mavx512vnni -mavx512vpopcntdq -mavx512bitalg -mpopcnt -mavx512fp16 -mavx512bf16 -mprefer-vector-width=512 ${FAISS_BMI2_FLAGS}>)
 endif()
 target_sources(faiss_avx512_spr PRIVATE
   ${FAISS_SIMD_AVX2_SRC}
@@ -593,8 +596,9 @@ if(FAISS_OPT_LEVEL STREQUAL "dd")
       COMPILE_SIMD_AVX512
       COMPILE_SIMD_AVX512_VPOPCNT
       COMPILE_SIMD_AVX512_SPR)
-    if(NOT WIN32)
-      # Baseline flags for common files (prevents auto-vectorization)
+    if(NOT MSVC)
+      # Baseline flags for common files (prevents auto-vectorization).
+      # MinGW is WIN32 but uses the GCC flags. /arch and /bigobj are MSVC-only.
       target_compile_options(faiss PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:-mpopcnt -msse4 -mno-avx -mno-avx2>)
       # Per-file SIMD flags (GCC/Clang)

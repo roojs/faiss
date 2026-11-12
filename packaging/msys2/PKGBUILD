@@ -1,0 +1,40 @@
+# Maintainer: roojs
+# UCRT64 pacman package of Faiss for OLLMchat.
+# Build from the repo root (MSYS2 UCRT64):
+#   ./scripts/ci/windows-msys2-build.sh
+#   ./scripts/ci/windows-package.sh
+#
+# Install the downloaded file (unsigned):
+#   pacman -U --noconfirm mingw-w64-ucrt-x86_64-faiss-*-any.pkg.tar.zst
+
+pkgname=mingw-w64-ucrt-x86_64-faiss
+pkgver="${FAISS_PKGVER:?set FAISS_PKGVER}"
+pkgrel=1
+pkgdesc='Faiss similarity search library (MSYS2 UCRT64)'
+arch=('any')
+url='https://github.com/roojs/faiss'
+license=('MIT')
+depends=(
+  'mingw-w64-ucrt-x86_64-gcc-libs'
+  'mingw-w64-ucrt-x86_64-openblas'
+  'mingw-w64-ucrt-x86_64-lapack'
+)
+options=('!strip' '!emptydirs')
+source=()
+sha256sums=()
+
+package() {
+  local src="${FAISS_PREBUILT_DESTDIR:?set FAISS_PREBUILT_DESTDIR}"
+  if [[ ! -d "${src}/ucrt64/bin" ]]; then
+    echo "PKGBUILD: missing staged tree (${src}/ucrt64)" >&2
+    return 1
+  fi
+  case "${pkgdir}" in
+    "${src}"|"${src}"/*)
+      echo "PKGBUILD: FAISS_PREBUILT_DESTDIR must not be under makepkg \$pkgdir (${pkgdir})" >&2
+      return 1
+      ;;
+  esac
+  mkdir -p "$pkgdir"
+  cp -a "${src}/." "$pkgdir/"
+}

@@ -1,0 +1,70 @@
+name: X - Windows MSYS2 package (Release calls this)
+
+# The MSYS2 UCRT64 pacman job. Start Release - Windows, or let Release MSYS2
+# (release-msys.yml) call this. Same runner setup as OLLMchat x-windows.yml.
+
+on:
+  workflow_call:
+    inputs:
+      pkgver:
+        description: Package version, with or without a leading v
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows:
+    name: MSYS2 UCRT64 package
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Git LF only
+        shell: bash
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - uses: actions/checkout@v5
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          path-type: strict
+          update: true
+          install: >-
+            base-devel
+            git
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-openblas
+            mingw-w64-ucrt-x86_64-lapack
+            mingw-w64-ucrt-x86_64-pkg-config
+
+      - name: Build and package Faiss
+        env:
+          FAISS_PKGVER: ${{ inputs.pkgver }}
+        run: |
+          chmod +x scripts/ci/windows-msys2-build.sh scripts/ci/windows-package.sh
+          ./scripts/ci/windows-msys2-build.sh
+          ./scripts/ci/windows-package.sh
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          cp -v packaging/msys2/mingw-w64-ucrt-x86_64-faiss-*-any.pkg.tar.zst artifacts/
+          ls -lh artifacts
+
+      - name: Upload MSYS2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: faiss-msys2
+          path: artifacts/*
