@@ -8,8 +8,7 @@ name: ROOJS - Release MSYS2
 on:
   push:
     tags:
-      - 'v*'
-      - '!v*-win'
+      - 'v*-win32'
   workflow_dispatch:
     inputs:
       tag:

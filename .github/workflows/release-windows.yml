@@ -1,20 +1,10 @@
 name: ROOJS - Release Windows
 
-# Manual MSYS2 package build. This is the workflow to run by hand.
-# A tagged -win release is ROOJS - Release MSYS2 (release-msys.yml).
+# Manual MSYS2 package build. Pushes to main do not start this.
+# The package release runs only from a v*-win32 tag (release-msys.yml).
 
 on:
   workflow_dispatch:
-  # Push to main starts the same package build. workflow_dispatch is blocked
-  # for this token, and this is how a packaging fix is checked.
-  push:
-    branches:
-      - main
-    paths:
-      - .github/workflows/release-windows.yml
-      - .github/workflows/x-windows.yml
-      - packaging/msys2/**
-      - scripts/ci/**
 
 run-name: ROOJS - Release Windows - ${{ github.ref_name }}
 
