@@ -39,3 +39,4 @@ faiss/python/swigfaiss_sve.swig
 /packaging/msys2/prebuilt/
 /packaging/msys2/*.pkg.tar.zst
 /packaging/msys2/*.pkg.tar.zst.sig
+/packaging/msys2/buildenv.sh

@@ -78,6 +78,13 @@ if [[ ! -f "${canon}/bin/libfaiss.dll" ]]; then
   echo "windows-msys2-build: normalize failed (${canon}/bin/libfaiss.dll)" >&2
   exit 1
 fi
+# makepkg starts a clean environment, and the package step is a second
+# process. Leave the version and stage path next to the PKGBUILD.
+cat > "${ROOT}/packaging/msys2/buildenv.sh" <<EOF
+FAISS_PKGVER='${FAISS_PKGVER}'
+FAISS_PREBUILT_DESTDIR='${STAGE}'
+EOF
+
 echo "==> staged ${canon}"
 find "${canon}" -type f -print | sort
 echo "FAISS_PKGVER=${FAISS_PKGVER}"

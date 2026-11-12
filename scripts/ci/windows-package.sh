@@ -27,19 +27,34 @@ if ! command -v "${MAKEPKG}" >/dev/null 2>&1; then
   echo "windows-package: ${MAKEPKG} not found (MSYS2 UCRT64; pacman -S base-devel)" >&2
   exit 1
 fi
+if [[ -z "${FAISS_PKGVER:-}" && -f "${PKG_DIR}/buildenv.sh" ]]; then
+  # shellcheck disable=SC1091
+  source "${PKG_DIR}/buildenv.sh"
+  if [[ -n "${FAISS_PREBUILT_DESTDIR:-}" ]]; then
+    STAGE="${FAISS_PREBUILT_DESTDIR}"
+  fi
+fi
+if [[ -z "${FAISS_PKGVER:-}" ]]; then
+  FAISS_PKGVER="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\{1,\}\([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1)"
+fi
+FAISS_PKGVER="${FAISS_PKGVER#v}"
+FAISS_PKGVER="${FAISS_PKGVER%-win}"
+if [[ -z "${FAISS_PKGVER}" ]]; then
+  echo "windows-package: FAISS_PKGVER is not set" >&2
+  exit 1
+fi
+export FAISS_PKGVER
+export FAISS_PREBUILT_DESTDIR="${STAGE}"
+
 if [[ ! -f "${STAGE}/ucrt64/bin/libfaiss.dll" ]]; then
   echo "windows-package: ${STAGE}/ucrt64/bin/libfaiss.dll missing (run windows-msys2-build.sh)" >&2
   exit 1
 fi
 
-if [[ -z "${FAISS_PKGVER:-}" ]]; then
-  echo "windows-package: FAISS_PKGVER is not set" >&2
-  exit 1
-fi
-FAISS_PKGVER="${FAISS_PKGVER#v}"
-FAISS_PKGVER="${FAISS_PKGVER%-win}"
-export FAISS_PKGVER
-export FAISS_PREBUILT_DESTDIR="${STAGE}"
+cat > "${PKG_DIR}/buildenv.sh" <<EOF
+FAISS_PKGVER='${FAISS_PKGVER}'
+FAISS_PREBUILT_DESTDIR='${STAGE}'
+EOF
 
 rm -f "${PKG_DIR}"/mingw-w64-ucrt-x86_64-faiss-*-any.pkg.tar.zst \
   "${PKG_DIR}"/mingw-w64-ucrt-x86_64-faiss-*-any.pkg.tar.zst.sig

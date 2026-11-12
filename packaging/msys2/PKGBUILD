@@ -7,6 +7,19 @@
 # Install the downloaded file (unsigned):
 #   pacman -U --noconfirm mingw-w64-ucrt-x86_64-faiss-*-any.pkg.tar.zst
 
+if [[ -z "${FAISS_PKGVER:-}" || -z "${FAISS_PREBUILT_DESTDIR:-}" ]]; then
+  for _env in \
+    "${BASH_SOURCE[0]%/*}/buildenv.sh" \
+    "${startdir:-}/buildenv.sh"
+  do
+    if [[ -f "${_env}" ]]; then
+      # shellcheck disable=SC1091
+      source "${_env}"
+      break
+    fi
+  done
+fi
+
 pkgname=mingw-w64-ucrt-x86_64-faiss
 pkgver="${FAISS_PKGVER:?set FAISS_PKGVER}"
 pkgrel=1
