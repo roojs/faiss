@@ -5,6 +5,16 @@ name: ROOJS - Release Windows
 
 on:
   workflow_dispatch:
+  # Push to main starts the same package build. workflow_dispatch is blocked
+  # for this token, and this is how a packaging fix is checked.
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/release-windows.yml
+      - .github/workflows/x-windows.yml
+      - packaging/msys2/**
+      - scripts/ci/**
 
 run-name: ROOJS - Release Windows - ${{ github.ref_name }}
 
