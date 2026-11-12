@@ -1,7 +1,7 @@
 name: ROOJS - Release MSYS2
 
-# Tag pushes publish a temporary GitHub Release named vX.Y.Z-win32 with the
-# UCRT64 pacman package. A tag that already ends in -win32 is that release.
+# Tag pushes publish a GitHub Release named vX.Y.Z-win32 with the UCRT64
+# pacman package. A tag that already ends in -win32 is that release.
 # workflow_dispatch with a tag input does the same from main, which is how
 # the upstream watch starts a release.
 
@@ -47,7 +47,7 @@ jobs:
           name: faiss-msys2
           path: artifacts
 
-      - name: Publish temporary -win32 release
+      - name: Publish -win32 release
         env:
           GH_TOKEN: ${{ github.token }}
           SRC_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
@@ -72,7 +72,7 @@ jobs:
           rel="${base}-win32"
           notes="$(mktemp)"
           {
-            echo "Temporary MSYS2 UCRT64 build of Faiss ${base} for OLLMchat."
+            echo "MSYS2 UCRT64 build of Faiss ${base} for OLLMchat."
             echo
             echo "Install in a UCRT64 shell:"
             echo
@@ -91,14 +91,13 @@ jobs:
             --verify-tag \
             --title "${rel}" \
             --notes-file "${notes}" \
-            --prerelease \
-            --latest=false \
+            --latest \
           || {
             gh release upload "${rel}" "${files[@]}" \
               --repo "$GITHUB_REPOSITORY" --clobber
             gh release edit "${rel}" \
               --repo "$GITHUB_REPOSITORY" \
               --notes-file "${notes}" \
-              --prerelease \
-              --latest=false
+              --prerelease=false \
+              --latest
           }
