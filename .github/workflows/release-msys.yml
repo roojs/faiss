@@ -81,9 +81,14 @@ jobs:
             echo '```'
           } > "${notes}"
           ls -lh "${files[@]}"
+          # The git tag already exists: this workflow only runs from that tag.
+          # Do not pass --target. The Releases API then tries to create the tag
+          # from a SHA, and a SHA that changes .github/workflows requires the
+          # workflows scope. GITHUB_TOKEN cannot hold that scope, so the call
+          # returns 403 even with contents: write.
           gh release create "${rel}" "${files[@]}" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
+            --verify-tag \
             --title "${rel}" \
             --notes-file "${notes}" \
             --prerelease \
