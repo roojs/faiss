@@ -1,7 +1,7 @@
 name: ROOJS - Watch upstream
 
 # Pull facebookresearch/faiss onto main. No release branches. When that pull
-# contains a version tag that does not already have a -win release, start
+# contains a version tag that does not already have a -win32 release, start
 # ROOJS - Release MSYS2 on main. A GITHUB_TOKEN push does not start other
 # workflows, so the release is dispatched here.
 
@@ -41,15 +41,15 @@ jobs:
           fi
           git push origin main
 
-          latest="$(git tag -l 'v*' --merged HEAD | grep -Ev -- '-win$' | sort -V | tail -1 || true)"
+          latest="$(git tag -l 'v*' --merged HEAD | grep -Ev -- '-(win|win32)$' | sort -V | tail -1 || true)"
           if [[ -z "${latest}" ]]; then
             echo "no version tag on main"
             exit 0
           fi
           echo "latest tag on main: ${latest}"
           git push origin "refs/tags/${latest}:refs/tags/${latest}" || true
-          if gh release view "${latest}-win" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "${latest}-win already published"
+          if gh release view "${latest}-win32" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "${latest}-win32 already published"
             exit 0
           fi
           gh workflow run release-msys.yml --repo "$GITHUB_REPOSITORY" --ref main -f "tag=${latest}"

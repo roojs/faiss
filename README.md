@@ -1,3 +1,7 @@
+# roojs/faiss
+
+This is a fork of [facebookresearch/faiss](https://github.com/facebookresearch/faiss) used to build the MSYS2 packages with AI, so OLLMchat can install a prebuilt Faiss library. The Windows tag is the upstream version with `-win32` (this tree is `v1.16.0-win32`). Upstream Faiss development stays in the original repository.
+
 # Faiss
 
 Faiss is a library for efficient similarity search and clustering of dense vectors. It contains algorithms that search in sets of vectors of any size, up to ones that possibly do not fit in RAM. It also contains supporting code for evaluation and parameter tuning. Faiss is written in C++ with complete wrappers for Python/numpy. Some of the most useful algorithms are implemented on the GPU. It is developed primarily at Meta's [Fundamental AI Research](https://ai.facebook.com/) group.

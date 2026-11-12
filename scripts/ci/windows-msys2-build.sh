@@ -25,6 +25,7 @@ if [[ -z "${FAISS_PKGVER:-}" && "${GITHUB_REF:-}" == refs/tags/v* ]]; then
 fi
 FAISS_PKGVER="${FAISS_PKGVER:-}"
 FAISS_PKGVER="${FAISS_PKGVER#v}"
+FAISS_PKGVER="${FAISS_PKGVER%-win32}"
 FAISS_PKGVER="${FAISS_PKGVER%-win}"
 if [[ ! "${FAISS_PKGVER}" =~ ^[0-9] ]]; then
   FAISS_PKGVER="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\{1,\}\([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1)"

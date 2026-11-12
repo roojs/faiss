@@ -10,6 +10,7 @@ on:
     tags:
       - 'v*'
       - '!v*-win'
+      - '!v*-win32'
 jobs:
   build-pull-request:
     uses: ./.github/workflows/build-pull-request.yml

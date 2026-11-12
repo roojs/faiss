@@ -38,6 +38,7 @@ if [[ -z "${FAISS_PKGVER:-}" ]]; then
   FAISS_PKGVER="$(sed -n 's/^[[:space:]]*VERSION[[:space:]]\{1,\}\([0-9][0-9.]*\).*/\1/p' CMakeLists.txt | head -1)"
 fi
 FAISS_PKGVER="${FAISS_PKGVER#v}"
+FAISS_PKGVER="${FAISS_PKGVER%-win32}"
 FAISS_PKGVER="${FAISS_PKGVER%-win}"
 if [[ -z "${FAISS_PKGVER}" ]]; then
   echo "windows-package: FAISS_PKGVER is not set" >&2
