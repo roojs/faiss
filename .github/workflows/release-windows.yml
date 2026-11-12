@@ -1,11 +1,12 @@
-name: Release - Windows
+name: ROOJS - Release Windows
 
-# Manual MSYS2 package build. Tags go through Release MSYS2 (release-msys.yml).
+# Manual MSYS2 package build. This is the workflow to run by hand.
+# A tagged -win release is ROOJS - Release MSYS2 (release-msys.yml).
 
 on:
   workflow_dispatch:
 
-run-name: Release - Windows - ${{ github.ref_name }}
+run-name: ROOJS - Release Windows - ${{ github.ref_name }}
 
 permissions:
   contents: read

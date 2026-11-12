@@ -1,7 +1,7 @@
-name: X - Windows MSYS2 package (Release calls this)
+name: ROOJS - Windows MSYS2 package
 
-# The MSYS2 UCRT64 pacman job. Start Release - Windows, or let Release MSYS2
-# (release-msys.yml) call this. Same runner setup as OLLMchat x-windows.yml.
+# Called by ROOJS - Release Windows and ROOJS - Release MSYS2.
+# Same runner setup as OLLMchat x-windows.yml. Do not start this file itself.
 
 on:
   workflow_call:

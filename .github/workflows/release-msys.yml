@@ -1,4 +1,4 @@
-name: Release MSYS2
+name: ROOJS - Release MSYS2
 
 # Tag pushes publish a temporary GitHub Release named vX.Y.Z-win with the
 # UCRT64 pacman package. The -win tag is the release only; it does not build
@@ -18,7 +18,7 @@ on:
         type: string
         default: ''
 
-run-name: Release MSYS2 - ${{ inputs.tag || github.ref_name }}
+run-name: ROOJS - Release MSYS2 - ${{ inputs.tag || github.ref_name }}
 
 permissions:
   contents: write

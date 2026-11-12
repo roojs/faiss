@@ -1,9 +1,9 @@
-name: Watch upstream
+name: ROOJS - Watch upstream
 
 # Pull facebookresearch/faiss onto main. No release branches. When that pull
 # contains a version tag that does not already have a -win release, start
-# Release MSYS2 on main. A GITHUB_TOKEN push does not start other workflows,
-# so the release is dispatched here.
+# ROOJS - Release MSYS2 on main. A GITHUB_TOKEN push does not start other
+# workflows, so the release is dispatched here.
 
 on:
   workflow_dispatch:
@@ -53,4 +53,4 @@ jobs:
             exit 0
           fi
           gh workflow run release-msys.yml --repo "$GITHUB_REPOSITORY" --ref main -f "tag=${latest}"
-          echo "dispatched Release MSYS2 for ${latest}"
+          echo "dispatched ROOJS - Release MSYS2 for ${latest}"
