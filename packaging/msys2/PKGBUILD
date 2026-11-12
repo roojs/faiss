@@ -28,7 +28,9 @@ arch=('any')
 url='https://github.com/roojs/faiss'
 license=('MIT')
 depends=(
-  'mingw-w64-ucrt-x86_64-gcc-libs'
+  'mingw-w64-ucrt-x86_64-libstdc++'
+  'mingw-w64-ucrt-x86_64-libgomp'
+  'mingw-w64-ucrt-x86_64-libgcc'
   'mingw-w64-ucrt-x86_64-openblas'
   'mingw-w64-ucrt-x86_64-lapack'
 )
