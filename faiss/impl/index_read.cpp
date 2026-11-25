@@ -1324,17 +1324,16 @@ static void read_HNSW(HNSW& hnsw, IOReader* f) {
 static void read_NSG(NSG& nsg, IOReader* f) {
     READ1(nsg.ntotal);
     READ1(nsg.R);
+    FAISS_THROW_IF_NOT_FMT(
+            nsg.ntotal >= 0, "invalid NSG ntotal %d", nsg.ntotal);
+    FAISS_THROW_IF_NOT_FMT(nsg.R > 0, "invalid NSG R %d (must be > 0)", nsg.R);
     FAISS_CHECK_DESERIALIZATION_LOOP_LIMIT(nsg.ntotal, "nsg.ntotal");
     FAISS_CHECK_DESERIALIZATION_LOOP_LIMIT(nsg.R, "nsg.R");
-    FAISS_THROW_IF_NOT_FMT(nsg.R > 0, "invalid NSG R %d (must be > 0)", nsg.R);
     READ1(nsg.L);
     READ1(nsg.C);
     READ1(nsg.search_L);
     READ1(nsg.enterpoint);
     READ1_BOOL(nsg.is_built);
-
-    FAISS_THROW_IF_NOT_FMT(
-            nsg.ntotal >= 0, "invalid NSG ntotal %d", nsg.ntotal);
 
     if (!nsg.is_built) {
         return;
