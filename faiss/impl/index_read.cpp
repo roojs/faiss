@@ -10,6 +10,7 @@
 
 #include <faiss/impl/io_macros.h>
 
+#include <algorithm>
 #include <cinttypes>
 #include <cmath>
 #include <cstdio>
@@ -526,6 +527,27 @@ static void read_ArrayInvertedLists_sizes(
     }
 }
 
+// Panorama storage and search scratch are allocated per batch, so a single
+// batch has to fit in the deserialization byte budget, even for empty lists.
+static void check_panorama_batch_size(
+        size_t bs,
+        size_t code_size,
+        const char* what) {
+    FAISS_THROW_IF_NOT_FMT(bs > 0, "invalid %s batch_size %zu", what, bs);
+    size_t slot_bytes = std::max(code_size, sizeof(float));
+    FAISS_THROW_IF_NOT_FMT(
+            bs <= get_deserialization_vector_byte_limit() / slot_bytes,
+            "%s batch_size %zu exceeds deserialization byte limit",
+            what,
+            bs);
+}
+
+// n rounded up to a whole number of batches of size bs.
+static size_t panorama_padded_size(size_t n, size_t bs) {
+    return mul_no_overflow(
+            n / bs + (n % bs != 0), bs, "panorama padded list size");
+}
+
 bool index_read_warn_on_null_invlists = true;
 
 std::unique_ptr<InvertedLists> read_InvertedLists_up(
@@ -565,7 +587,7 @@ std::unique_ptr<InvertedLists> read_InvertedLists_up(
                     i,
                     n);
             ailp->ids[i].resize(n);
-            size_t num_elems = ((n + bs - 1) / bs) * bs;
+            size_t num_elems = panorama_padded_size(n, bs);
             size_t codes_bytes = mul_no_overflow(
                     num_elems, code_size, "inverted list codes");
             FAISS_THROW_IF_NOT_FMT(
@@ -605,7 +627,7 @@ std::unique_ptr<InvertedLists> read_InvertedLists_up(
         READ1(bs);
         FAISS_THROW_IF_NOT_FMT(
                 n_levels > 0, "invalid ilp2 n_levels %zd", n_levels);
-        FAISS_THROW_IF_NOT_FMT(bs > 0, "invalid ilp2 batch_size %zd", bs);
+        check_panorama_batch_size(bs, code_size, "ilp2");
         auto ailp = std::make_unique<ArrayInvertedListsPanorama>(
                 nlist, code_size, n_levels, bs);
         std::vector<size_t> sizes(nlist);
@@ -619,7 +641,7 @@ std::unique_ptr<InvertedLists> read_InvertedLists_up(
                     i,
                     sizes[i]);
             ailp->ids[i].resize(sizes[i]);
-            size_t num_elems = ((sizes[i] + bs - 1) / bs) * bs;
+            size_t num_elems = panorama_padded_size(sizes[i], bs);
             size_t codes_bytes = mul_no_overflow(
                     num_elems, code_size, "inverted list codes");
             FAISS_THROW_IF_NOT_FMT(
@@ -1761,8 +1783,8 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
         READ1(n_levels);
         FAISS_THROW_IF_NOT_FMT(n_levels > 0, "invalid n_levels %zd", n_levels);
         READ1(batch_size);
-        FAISS_THROW_IF_NOT_FMT(
-                batch_size > 0, "invalid IxFP batch_size %zd", batch_size);
+        check_panorama_batch_size(
+                batch_size, size_t(d) * sizeof(float), "IxFP");
         std::unique_ptr<IndexFlatPanorama> idxp;
         if (h == fourcc("IxFP")) {
             idxp = std::make_unique<IndexFlatL2Panorama>(
@@ -2235,10 +2257,7 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
         ivfp->code_size = ivfp->d * sizeof(float);
         READ1(ivfp->n_levels);
         READ1(ivfp->batch_size);
-        FAISS_THROW_IF_NOT_FMT(
-                ivfp->batch_size > 0,
-                "invalid IwP2 batch_size %zd",
-                ivfp->batch_size);
+        check_panorama_batch_size(ivfp->batch_size, ivfp->code_size, "IwP2");
         read_InvertedLists(*ivfp, f, io_flags);
         idx = std::move(ivfp);
     } else if (h == fourcc("IwFl")) {

@@ -631,7 +631,8 @@ inline void flat_pano_search_core(
     bool use_sel = sel != nullptr;
 
     [[maybe_unused]] int nt = std::min(int(n), omp_get_max_threads());
-    size_t n_batches = (index.ntotal + index.batch_size - 1) / index.batch_size;
+    size_t n_batches = index.ntotal / index.batch_size +
+            (index.ntotal % index.batch_size != 0);
 
 #pragma omp parallel num_threads(nt)
     {
@@ -704,11 +705,19 @@ inline void flat_pano_search_core(
 
 void IndexFlatPanorama::add(idx_t n, const float* x) {
     size_t offset = ntotal;
-    ntotal += n;
-    size_t num_batches = (ntotal + batch_size - 1) / batch_size;
+    size_t new_ntotal = add_no_overflow(offset, n, "IndexFlatPanorama ntotal");
+    size_t num_slots = mul_no_overflow(
+            new_ntotal / batch_size + (new_ntotal % batch_size != 0),
+            batch_size,
+            "IndexFlatPanorama slots");
+    size_t codes_size =
+            mul_no_overflow(num_slots, code_size, "IndexFlatPanorama codes");
+    size_t cum_sums_size = mul_no_overflow(
+            num_slots, pano.n_levels + 1, "IndexFlatPanorama cum_sums");
 
-    codes.resize(num_batches * batch_size * code_size);
-    cum_sums.resize(num_batches * batch_size * (pano.n_levels + 1));
+    codes.resize(codes_size);
+    cum_sums.resize(cum_sums_size);
+    ntotal = new_ntotal;
 
     const uint8_t* code = reinterpret_cast<const uint8_t*>(x);
     pano.copy_codes_to_level_layout(codes.data(), offset, n, code);
@@ -792,7 +801,7 @@ size_t IndexFlatPanorama::remove_ids(const IDSelector& sel) {
     size_t nremove = ntotal - j;
     if (nremove > 0) {
         ntotal = j;
-        size_t num_batches = (ntotal + batch_size - 1) / batch_size;
+        size_t num_batches = ntotal / batch_size + (ntotal % batch_size != 0);
         codes.resize(num_batches * batch_size * code_size);
         cum_sums.resize(num_batches * batch_size * (pano.n_levels + 1));
     }
