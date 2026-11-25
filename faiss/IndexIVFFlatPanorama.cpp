@@ -112,7 +112,7 @@ struct IVFFlatScannerPanorama : InvertedListScanner {
         size_t nup = 0;
 
         const size_t bs = storage->pano.batch_size;
-        const size_t n_batches = (list_size + bs - 1) / bs;
+        const size_t n_batches = list_size / bs + (list_size % bs != 0);
 
         const float* cum_sums_data = storage->get_cum_sums(list_no);
 

@@ -394,14 +394,9 @@ size_t ArrayInvertedListsPanorama::add_entries(
         const uint8_t* code) {
     assert(list_no < nlist);
     size_t o = ids[list_no].size();
-
-    ids[list_no].resize(o + n_entry);
+    size_t new_size = add_no_overflow(o, n_entry, "panorama list size");
+    ArrayInvertedListsPanorama::resize(list_no, new_size);
     memcpy(&ids[list_no][o], ids_in, sizeof(ids_in[0]) * n_entry);
-
-    size_t new_size = o + n_entry;
-    size_t num_batches = (new_size + pano.batch_size - 1) / pano.batch_size;
-    codes[list_no].resize(num_batches * pano.batch_size * code_size);
-    cum_sums[list_no].resize(num_batches * pano.batch_size * (n_levels + 1));
 
     // Cast to float* is safe here as we guarantee codes are always float
     // vectors for `IndexIVFFlatPanorama` (verified by the constructor).
@@ -433,11 +428,17 @@ void ArrayInvertedListsPanorama::update_entries(
 }
 
 void ArrayInvertedListsPanorama::resize(size_t list_no, size_t new_size) {
-    ids[list_no].resize(new_size);
+    const size_t bs = pano.batch_size;
+    size_t num_slots = mul_no_overflow(
+            new_size / bs + (new_size % bs != 0), bs, "panorama list slots");
+    size_t codes_size =
+            mul_no_overflow(num_slots, code_size, "panorama list codes");
+    size_t cum_sums_size = mul_no_overflow(
+            num_slots, n_levels + 1, "panorama list cum_sums");
 
-    size_t num_batches = (new_size + pano.batch_size - 1) / pano.batch_size;
-    codes[list_no].resize(num_batches * pano.batch_size * code_size);
-    cum_sums[list_no].resize(num_batches * pano.batch_size * (n_levels + 1));
+    ids[list_no].resize(new_size);
+    codes[list_no].resize(codes_size);
+    cum_sums[list_no].resize(cum_sums_size);
 }
 
 const uint8_t* ArrayInvertedListsPanorama::get_single_code(

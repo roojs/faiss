@@ -62,6 +62,10 @@ Panorama::Panorama(
           n_levels(n_levels_in),
           batch_size(batch_size_in) {
     set_derived_values();
+    FAISS_THROW_IF_NOT_MSG(batch_size > 0, "Panorama: batch_size must be > 0");
+    // The batch offset arithmetic in this class is unchecked.
+    (void)mul_no_overflow(batch_size, code_size, "Panorama batch codes");
+    (void)mul_no_overflow(batch_size, n_levels + 1, "Panorama batch cum_sums");
 }
 
 void Panorama::set_derived_values() {
