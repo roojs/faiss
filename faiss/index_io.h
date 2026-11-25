@@ -119,8 +119,10 @@ std::unique_ptr<InvertedLists> read_InvertedLists_up(
 
 // Returns the current deserialization loop limit.
 // When nonzero, deserialization rejects loop-driving fields (nlist,
-// nsplits, VT chain length, nhash, etc.) that exceed this value.
-// Default: 0 (no limit).
+// nsplits, VT chain length, nhash, NSG ntotal and R, etc.) that exceed
+// this value, before any table is sized from them.
+// Default: 1 << 24 (16777216). Indexes with more inverted lists or graph
+// nodes than this need a larger limit; 0 disables the check.
 size_t get_deserialization_loop_limit();
 
 // Sets the deserialization loop limit.

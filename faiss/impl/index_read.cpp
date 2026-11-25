@@ -90,7 +90,10 @@
 namespace faiss {
 
 namespace {
-size_t deserialization_loop_limit_ = 0;
+// Counts such as nlist size per-entry tables before any payload is read, so
+// a small file can claim a huge count. The default bounds those tables to a
+// few GB; loading a larger index requires set_deserialization_loop_limit.
+size_t deserialization_loop_limit_ = size_t{1} << 24;
 size_t deserialization_vector_byte_limit_ = uint64_t{1} << 40; // 1 TB
 size_t deserialization_lattice_r2_limit_ = 0;
 
@@ -1341,10 +1344,22 @@ static void read_NSG(NSG& nsg, IOReader* f) {
     int N = nsg.ntotal;
     int R = nsg.R;
 
+    // ntotal and R are each bounded above, but their product is the graph
+    // size, so it gets the same per-buffer bound as any other vector.
+    const size_t graph_size =
+            mul_no_overflow((size_t)N, (size_t)R, "NSG graph");
+    FAISS_THROW_IF_NOT_FMT(
+            graph_size <
+                    get_deserialization_vector_byte_limit() / sizeof(int),
+            "NSG graph ntotal=%d * R=%d exceeds deserialization byte limit",
+            N,
+            R);
+
     auto& graph = nsg.final_graph;
     graph = std::make_shared<nsg::Graph<int>>(N, R);
-    std::fill_n(graph->data, (size_t)N * R, EMPTY_ID);
 
+    // Each row is filled only once it is read, so memory is touched in
+    // step with the neighbor lists actually present in the file.
     for (int i = 0; i < N; i++) {
         int j;
         for (j = 0; j < R; j++) {
@@ -1357,6 +1372,8 @@ static void read_NSG(NSG& nsg, IOReader* f) {
                 break;
             }
         }
+        int* row = graph->data + (size_t)i * R;
+        std::fill(row + j, row + R, EMPTY_ID);
         if (j == R) {
             // All R neighbor slots were filled; consume the trailing
             // EMPTY_ID sentinel that write_NSG always appends.
