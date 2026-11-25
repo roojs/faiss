@@ -38,6 +38,7 @@ set(FAISS_TEST_SRC
   test_rabitq_batch_estimates.cpp
   test_super_kmeans_foundations.cpp
   test_pipnn.cpp
+  test_panorama_batch_overflow.cpp
 )
 
 # Tests that use POSIX APIs or have platform-specific issues on Windows
