@@ -341,12 +341,6 @@ std::unique_ptr<VectorTransform> read_VectorTransform_up(IOReader* f) {
         READ1_BOOL(lt->have_bias);
         READVECTOR(lt->A);
         READVECTOR(lt->b);
-        FAISS_THROW_IF_NOT(
-                lt->A.size() >= size_t(lt->d_in) * size_t(lt->d_out));
-        FAISS_THROW_IF_MSG(
-                lt->have_bias && lt->b.size() < size_t(lt->d_out),
-                "bias vector smaller than d_out");
-        lt->set_is_orthonormal();
         vt = std::move(lt);
     } else if (h == fourcc("RmDT")) {
         auto rdt = std::make_unique<RemapDimensionsTransform>();
@@ -410,6 +404,29 @@ std::unique_ptr<VectorTransform> read_VectorTransform_up(IOReader* f) {
                         get_deserialization_vector_byte_limit() / sizeof(float),
                 "VectorTransform d_in * d_out would exceed "
                 "deserialization vector byte limit");
+    }
+    if (auto* lt = dynamic_cast<LinearTransform*>(vt.get())) {
+        // The matrix and bias can only be validated against d_in / d_out,
+        // which are serialized after them.
+        if (!lt->is_trained && lt->A.empty()) {
+            // untrained transforms are serialized without a matrix
+            lt->is_orthonormal = false;
+        } else {
+            size_t expected_A = size_t(lt->d_in) * size_t(lt->d_out);
+            FAISS_THROW_IF_NOT_FMT(
+                    lt->A.size() == expected_A,
+                    "LinearTransform matrix A.size()=%zu does not match "
+                    "d_in * d_out = %zu",
+                    lt->A.size(),
+                    expected_A);
+            FAISS_THROW_IF_NOT_FMT(
+                    !lt->have_bias || lt->b.size() == size_t(lt->d_out),
+                    "LinearTransform bias b.size()=%zu does not match "
+                    "d_out=%d",
+                    lt->b.size(),
+                    lt->d_out);
+            lt->set_is_orthonormal();
+        }
     }
     if (h == fourcc("HRot")) {
         FAISS_THROW_IF_NOT_FMT(

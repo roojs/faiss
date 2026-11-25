@@ -242,8 +242,13 @@ void LinearTransform::apply_noalloc(idx_t n, const float* x, float* xt) const {
 
 void LinearTransform::transform_transpose(idx_t n, const float* y, float* x)
         const {
+    FAISS_THROW_IF_NOT_MSG(
+            A.size() == static_cast<size_t>(d_out) * d_in,
+            "Transformation matrix not initialized");
     std::vector<float> y_bias_corrected;
     if (have_bias) { // allocate buffer to store bias-corrected data
+        FAISS_THROW_IF_NOT_MSG(
+                b.size() == static_cast<size_t>(d_out), "Bias not initialized");
         y_bias_corrected.resize(n * d_out);
         const float* yr = y;
         float* yw = y_bias_corrected.data();
