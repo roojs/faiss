@@ -26,6 +26,9 @@ LOG = logging.getLogger(__name__)
 # default
 PORT = 12032
 
+# The RPC protocol pickles with protocol 4, which never needs long text lines.
+MAX_LINE_LENGTH = 64 * 1024
+
 safe_modules = {
     "numpy",
     "numpy.core.multiarray",
@@ -67,7 +70,7 @@ class FileSock:
         # print("read bs=%d"%bs)
         b = []
         nb = 0
-        while len(b) < bs:
+        while nb < bs:
             # print('   loop')
             rb = self.sock.recv(bs - nb)
             if not rb:
@@ -77,14 +80,20 @@ class FileSock:
         return b"".join(b)
 
     def readline(self):
-        # print("readline!")
-        """may be optimized..."""
-        s = bytes()
+        """Read up to and including the next newline, or until EOF."""
+        s = bytearray()
         while True:
             c = self.read(1)
+            if not c:
+                break
             s += c
-        if len(c) == 0 or chr(c[0]) == "\n":
-            return s
+            if c == b"\n":
+                break
+            if len(s) >= MAX_LINE_LENGTH:
+                raise pickle.UnpicklingError(
+                    "line exceeds %d bytes" % MAX_LINE_LENGTH
+                )
+        return bytes(s)
 
 
 class ClientExit(Exception):
