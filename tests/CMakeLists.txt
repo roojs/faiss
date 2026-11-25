@@ -45,6 +45,7 @@ if(NOT WIN32)
   list(APPEND FAISS_TEST_SRC
     test_ondisk_ivf.cpp
     test_disable_pq_sdc_tables.cpp
+    test_ondisk_embedded_path.cpp
   )
 endif()
 
@@ -115,6 +116,18 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(riscv64|riscv)")
 endif()
 
 add_executable(faiss_test ${FAISS_TEST_SRC})
+
+# Test-only interposer. It does not stand in for faiss: faiss still calls the
+# real libc open path. The interposer only retargets one symlink after the
+# first lookup so a check-then-open of the embedded path is observable.
+if(NOT WIN32)
+  add_library(ondisk_path_relookup_preload SHARED
+    ondisk_path_relookup_preload.cpp)
+  target_link_libraries(ondisk_path_relookup_preload PRIVATE ${CMAKE_DL_LIBS})
+  target_compile_definitions(faiss_test PRIVATE
+    FAISS_OD_RELOOKUP_PRELOAD="$<TARGET_FILE:ondisk_path_relookup_preload>")
+  add_dependencies(faiss_test ondisk_path_relookup_preload)
+endif()
 
 if(FAISS_ENABLE_SVS)
   target_compile_definitions(faiss_test PRIVATE FAISS_ENABLE_SVS FAISS_SVS_RUNTIME_VERSION=${FAISS_SVS_RUNTIME_VERSION})
