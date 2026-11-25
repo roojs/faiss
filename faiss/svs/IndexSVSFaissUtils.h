@@ -266,15 +266,15 @@ inline MmapSpan acquire_mmap_span(MappedFileIOReader* mf) {
     FAISS_THROW_IF_NOT(mf);
     FAISS_THROW_IF_NOT(mf->mmap_owner);
     size_t pos = mf->pos;
-    size_t size_to_end = mf->mmap_owner->size() - pos;
     // Reject an empty span: MappedFileIOReader::mmap() returns 0 without
     // writing *ptr when no bytes remain, which would otherwise pass the
     // size check below and hand a nullptr / zero size to the SVS runtime
     // (e.g. for a truncated or corrupt file).
     FAISS_THROW_IF_NOT_FMT(
-            size_to_end > 0,
+            pos < mf->mmap_owner->size(),
             "acquire_mmap_span: no mapped bytes remain at reader position %zu",
             pos);
+    size_t size_to_end = mf->mmap_owner->size() - pos;
     void* data = nullptr;
     // mmap returns actual_nitems; with size=1 this equals bytes
     size_t actual_nitems = mf->mmap(&data, 1, size_to_end);

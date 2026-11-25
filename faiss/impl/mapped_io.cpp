@@ -20,6 +20,7 @@
 
 #endif
 
+#include <algorithm>
 #include <cstring>
 
 #include <faiss/impl/FaissAssert.h>
@@ -290,12 +291,13 @@ size_t MappedFileIOReader::mmap(void** ptr, size_t size, size_t nitems) {
         return nitems;
     }
 
-    size_t actual_size = size * nitems;
-    if (pos + size * nitems > mmap_owner->size()) {
-        actual_size = mmap_owner->size() - pos;
+    const size_t total = mmap_owner->size();
+    if (pos >= total) {
+        return 0;
     }
 
-    size_t actual_nitems = (actual_size + size - 1) / size;
+    // only whole elements, so that pos never moves past the end of the file
+    const size_t actual_nitems = std::min(nitems, (total - pos) / size);
     if (actual_nitems == 0) {
         return 0;
     }
