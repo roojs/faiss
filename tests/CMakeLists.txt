@@ -159,6 +159,14 @@ endif()
 find_package(OpenMP REQUIRED)
 find_package(GTest CONFIG REQUIRED)
 
+# Fails until a negative NNDescent neighbor id is rejected on load or skipped
+# before it is used as a subscript. Run:
+#   ./test_nndescent_negative_neighbor
+add_executable(test_nndescent_negative_neighbor
+  test_nndescent_negative_neighbor.cpp)
+link_to_faiss_lib(test_nndescent_negative_neighbor)
+target_link_libraries(test_nndescent_negative_neighbor PRIVATE OpenMP::OpenMP_CXX)
+
 target_link_libraries(faiss_test PRIVATE
   OpenMP::OpenMP_CXX
   GTest::gtest_main
