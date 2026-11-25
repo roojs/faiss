@@ -178,3 +178,16 @@ elseif(WIN32)
 else()
   gtest_discover_tests(faiss_test)
 endif()
+
+# POSIX-only: these cases fork a child and load a crafted file with
+# IO_FLAG_MMAP_IFC. They fail while MappedFileIOReader rounds a short tail
+# past EOF and the next read overflows the caller buffer.
+if(NOT WIN32 AND NOT CMAKE_CROSSCOMPILING)
+  add_executable(faiss_test_mmap_rounded_read test_mmap_rounded_read.cpp)
+  link_to_faiss_lib(faiss_test_mmap_rounded_read)
+  target_link_libraries(faiss_test_mmap_rounded_read PRIVATE
+    OpenMP::OpenMP_CXX
+    GTest::gtest_main
+  )
+  gtest_discover_tests(faiss_test_mmap_rounded_read)
+endif()
