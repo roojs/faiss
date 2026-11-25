@@ -1348,8 +1348,7 @@ static void read_NSG(NSG& nsg, IOReader* f) {
     const size_t graph_size =
             mul_no_overflow((size_t)N, (size_t)R, "NSG graph");
     FAISS_THROW_IF_NOT_FMT(
-            graph_size <
-                    get_deserialization_vector_byte_limit() / sizeof(int),
+            graph_size < get_deserialization_vector_byte_limit() / sizeof(int),
             "NSG graph ntotal=%d * R=%d exceeds deserialization byte limit",
             N,
             R);
