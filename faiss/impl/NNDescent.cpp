@@ -508,8 +508,9 @@ void NNDescent::search(
             int n = retset[k].id;
 
             for (int m = 0; m < K; ++m) {
-                int id = final_graph[n * K + m];
-                if (vt.get(id)) {
+                int id = final_graph[size_t(n) * K + m];
+                // -1 marks an empty neighbor slot
+                if (id < 0 || id >= ntotal || vt.get(id)) {
                     continue;
                 }
 
