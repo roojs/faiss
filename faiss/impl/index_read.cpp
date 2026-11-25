@@ -10,6 +10,7 @@
 
 #include <faiss/impl/io_macros.h>
 
+#include <algorithm>
 #include <cinttypes>
 #include <cmath>
 #include <cstdio>
@@ -720,6 +721,96 @@ std::unique_ptr<InvertedLists> read_InvertedLists_up(
 InvertedLists* read_InvertedLists(IOReader* f, int io_flags) {
     return read_InvertedLists_up(f, io_flags).release();
 }
+
+namespace {
+
+// The ilbl reader only checks a block list against its own n_per_block and
+// block_size. Readers of get_codes() use their own layout, so the buffer must
+// also cover that layout.
+
+// For readers that treat the codes as list_size * code_size contiguous bytes.
+void check_block_invlists_flat(
+        const InvertedLists* ils,
+        size_t code_size,
+        const char* context) {
+    auto bil = dynamic_cast<const BlockInvertedLists*>(ils);
+    if (!bil) {
+        return;
+    }
+    for (size_t i = 0; i < bil->nlist; i++) {
+        size_t needed = mul_no_overflow(bil->ids[i].size(), code_size, context);
+        FAISS_THROW_IF_NOT_FMT(
+                bil->codes[i].size() >= needed,
+                "%s: block inverted list %zd has %zd code bytes, "
+                "%zd ids of %zd bytes need %zd",
+                context,
+                i,
+                bil->codes[i].size(),
+                bil->ids[i].size(),
+                code_size,
+                needed);
+    }
+}
+
+// For fast-scan readers, which walk the codes in blocks of bbs vectors and
+// block_stride bytes.
+void check_block_invlists_fastscan(
+        const BlockInvertedLists& bil,
+        int bbs,
+        size_t block_stride,
+        const char* context) {
+    FAISS_THROW_IF_NOT_FMT(
+            bbs > 0 && bil.n_per_block == static_cast<size_t>(bbs) &&
+                    bil.block_size >= block_stride,
+            "%s: block inverted lists have n_per_block=%zd block_size=%zd, "
+            "index needs n_per_block=%d block_size>=%zd",
+            context,
+            bil.n_per_block,
+            bil.block_size,
+            bbs,
+            block_stride);
+    for (size_t i = 0; i < bil.nlist; i++) {
+        size_t n = bil.ids[i].size();
+        size_t n_block = n / bbs + (n % bbs != 0 ? 1 : 0);
+        size_t needed = mul_no_overflow(n_block, block_stride, context);
+        FAISS_THROW_IF_NOT_FMT(
+                bil.codes[i].size() >= needed,
+                "%s: block inverted list %zd has %zd code bytes, "
+                "%zd ids need %zd",
+                context,
+                i,
+                bil.codes[i].size(),
+                n,
+                needed);
+    }
+}
+
+void check_ivf_block_invlists(const IndexIVF& ivf) {
+    auto bil = dynamic_cast<const BlockInvertedLists*>(ivf.invlists);
+    if (!bil) {
+        return;
+    }
+    auto ivfsqfs = dynamic_cast<const IndexIVFSQFastScan*>(&ivf);
+    if (ivfsqfs && sq_fastscan::is_fallback(ivfsqfs->sq.qtype)) {
+        // Fallback types scan with the ScalarQuantizer's flat scanner.
+        check_block_invlists_flat(
+                bil,
+                std::max(ivf.code_size, ivfsqfs->sq.code_size),
+                "IndexIVFSQFastScan");
+    } else if (auto ivffs = dynamic_cast<const IndexIVFFastScan*>(&ivf)) {
+        FAISS_THROW_IF_NOT_FMT(
+                ivffs->bbs > 0, "IndexIVFFastScan: invalid bbs=%d", ivffs->bbs);
+        check_block_invlists_fastscan(
+                *bil,
+                ivffs->bbs,
+                ivffs->get_block_stride(),
+                "IndexIVFFastScan");
+    } else {
+        check_block_invlists_flat(bil, ivf.code_size, "IndexIVF");
+    }
+}
+
+} // namespace
 
 void read_InvertedLists(IndexIVF& ivf, IOReader* f, int io_flags) {
     auto ils = read_InvertedLists_up(f, io_flags);
@@ -2940,6 +3031,10 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
         READ1(has_orig);
         if (has_orig) {
             ivfsqfs->lo_codes_invlists = read_InvertedLists(f, io_flags);
+            check_block_invlists_flat(
+                    ivfsqfs->lo_codes_invlists,
+                    ivfsqfs->lo_code_size(),
+                    "IndexIVFSQFastScan lo_codes");
             // Rebuild direct_map from lo_codes_invlists for reranking
             ivfsqfs->direct_map.set_type(
                     DirectMap::Hashtable, ivfsqfs->invlists, 0);
@@ -3391,6 +3486,11 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
         if (is_legacy) {
             auto* bil = dynamic_cast<BlockInvertedLists*>(ivrqfs->invlists);
             FAISS_THROW_IF_NOT(bil);
+            check_block_invlists_fastscan(
+                    *bil,
+                    ivrqfs->bbs,
+                    ((ivrqfs->M2 + 1) / 2) * ivrqfs->bbs,
+                    "IndexIVFRaBitQFastScan legacy");
 
             const size_t storage_size =
                     rabitq_utils::compute_per_vector_storage_size(
@@ -3425,6 +3525,9 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 h,
                 fourcc_inv_printable(h).c_str());
         idx.reset();
+    }
+    if (auto ivf = dynamic_cast<const IndexIVF*>(idx.get())) {
+        check_ivf_block_invlists(*ivf);
     }
     return idx;
 }
@@ -3483,6 +3586,7 @@ static void read_InvertedLists(IndexBinaryIVF& ivf, IOReader* f, int io_flags) {
     FAISS_THROW_IF_NOT(
             !ils ||
             (ils->nlist == ivf.nlist && ils->code_size == ivf.code_size));
+    check_block_invlists_flat(ils.get(), ivf.code_size, "IndexBinaryIVF");
     ivf.invlists = ils.release();
     ivf.own_invlists = true;
 }

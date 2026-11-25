@@ -19,6 +19,17 @@
 
 namespace faiss {
 
+namespace {
+
+// ceil(n / n_per_block) without forming n + n_per_block - 1, which wraps
+// for large n_per_block.
+size_t n_blocks_for(size_t n, size_t n_per_block) {
+    FAISS_THROW_IF_NOT_MSG(n_per_block > 0, "n_per_block must be > 0");
+    return n / n_per_block + (n % n_per_block != 0 ? 1 : 0);
+}
+
+} // namespace
+
 BlockInvertedLists::BlockInvertedLists(
         size_t nlist_in,
         size_t n_per_block_in,
@@ -54,10 +65,14 @@ size_t BlockInvertedLists::add_entries(
     }
     FAISS_THROW_IF_NOT(list_no < nlist);
     size_t o = ids[list_no].size();
-    ids[list_no].resize(o + n_entry);
+    size_t n_total =
+            add_no_overflow(o, n_entry, "BlockInvertedLists::add_entries");
+    size_t n_block = n_blocks_for(n_total, n_per_block);
+    size_t n_bytes = mul_no_overflow(
+            n_block, block_size, "BlockInvertedLists::add_entries");
+    ids[list_no].resize(n_total);
     memcpy(&ids[list_no][o], ids_in, sizeof(ids_in[0]) * n_entry);
-    size_t n_block = (o + n_entry + n_per_block - 1) / n_per_block;
-    codes[list_no].resize(n_block * block_size);
+    codes[list_no].resize(n_bytes);
     if (o % block_size == 0) {
         // copy whole blocks
         memcpy(&codes[list_no][o * packer->code_size],
@@ -114,10 +129,11 @@ const idx_t* BlockInvertedLists::get_ids(size_t list_no) const {
 }
 
 void BlockInvertedLists::resize(size_t list_no, size_t new_size) {
+    size_t n_block = n_blocks_for(new_size, n_per_block);
+    size_t new_nbytes =
+            mul_no_overflow(n_block, block_size, "BlockInvertedLists::resize");
     ids[list_no].resize(new_size);
     size_t prev_nbytes = codes[list_no].size();
-    size_t n_block = (new_size + n_per_block - 1) / n_per_block;
-    size_t new_nbytes = n_block * block_size;
     codes[list_no].resize(new_nbytes);
     if (prev_nbytes < new_nbytes) {
         // set new elements to 0
@@ -211,7 +227,7 @@ InvertedLists* BlockInvertedListsIOHook::read(IOReader* f, int /* io_flags */)
         READVECTOR(il->ids[i]);
         READVECTOR(il->codes[i]);
         size_t n_ids = il->ids[i].size();
-        size_t n_block = (n_ids + il->n_per_block - 1) / il->n_per_block;
+        size_t n_block = n_blocks_for(n_ids, il->n_per_block);
         size_t expected_codes_size = mul_no_overflow(
                 n_block, il->block_size, "BlockInvertedLists codes");
         FAISS_THROW_IF_NOT_FMT(
