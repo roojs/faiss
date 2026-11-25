@@ -50,7 +50,10 @@ void write_index_binary(const IndexBinary* idx, IOWriter* writer);
 // The read_index flags are implemented only for a subset of index types.
 const int IO_FLAG_READ_ONLY = 2;
 // strip directory component from ondisk filename, and assume it's in
-// the same directory as the index file
+// the same directory as the index file. The index must be read from a named
+// file and the data file must be a regular file, not a symlink. The filename
+// stored in the index is never opened as is: OnDiskInvertedLists data is only
+// loaded when this flag is set (or skipped with IO_FLAG_SKIP_IVF_DATA).
 const int IO_FLAG_ONDISK_SAME_DIR = 4;
 // don't load IVF data to RAM, only list sizes
 const int IO_FLAG_SKIP_IVF_DATA = 8;
@@ -62,6 +65,10 @@ const int IO_FLAG_SKIP_PRECOMPUTE_TABLE = 16;
 // this will prevent graph building because sdc
 // computations are required to construct the graph
 const int IO_FLAG_PQ_SKIP_SDC_TABLE = 32;
+// with IO_FLAG_ONDISK_SAME_DIR, open the ondisk data file read-write so that
+// modifications of the inverted lists are written back to it. Without this
+// flag the file is opened read-only and modifications stay in memory.
+const int IO_FLAG_ONDISK_WRITABLE = 64;
 // try to memmap data (useful to load an ArrayInvertedLists as an
 // OnDiskInvertedLists)
 const int IO_FLAG_MMAP = IO_FLAG_SKIP_IVF_DATA | 0x646f0000;

@@ -27,7 +27,7 @@ class CombinedIndex:
         for fname in invlist_fnames:
             if os.path.exists(fname):
                 print("reading", fname, end="\r", flush=True)
-                index = faiss.read_index(fname)
+                index = faiss.read_index(fname, faiss.IO_FLAG_ONDISK_SAME_DIR)
                 indexes.append(index)
                 il = faiss.extract_index_ivf(index).invlists
             else:

@@ -827,7 +827,9 @@ class TestMerge(unittest.TestCase):
             )
             faiss.write_index(index, tmpdir + "/populated.index")
 
-            index = faiss.read_index(tmpdir + "/populated.index")
+            index = faiss.read_index(
+                tmpdir + "/populated.index", faiss.IO_FLAG_ONDISK_SAME_DIR
+            )
             index.nprobe = 5
             D, I = index.search(ds.xq, 5)
 
