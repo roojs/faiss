@@ -77,6 +77,9 @@ struct OnDiskInvertedLists : InvertedLists {
     size_t totsize;
     uint8_t* ptr;   // mmap base pointer
     bool read_only; /// are inverted lists mapped read-only
+    /// descriptor of the data file when it was opened while reading an
+    /// index, -1 when the file is accessed through filename
+    int fd;
 
     OnDiskInvertedLists(size_t nlist, size_t code_size, const char* filename);
 
