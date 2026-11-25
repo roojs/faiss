@@ -45,6 +45,7 @@ if(NOT WIN32)
   list(APPEND FAISS_TEST_SRC
     test_ondisk_ivf.cpp
     test_disable_pq_sdc_tables.cpp
+    test_ondisk_embedded_path.cpp
   )
 endif()
 
@@ -115,6 +116,25 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "(riscv64|riscv)")
 endif()
 
 add_executable(faiss_test ${FAISS_TEST_SRC})
+
+# The embedded-path tests interpose filesystem lookups. --wrap applies to this
+# executable, including the statically linked faiss objects. Wrappers are inert
+# until a test arms them.
+if(NOT WIN32)
+  target_link_options(faiss_test PRIVATE
+    -Wl,--wrap=fopen
+    -Wl,--wrap=fopen64
+    -Wl,--wrap=open
+    -Wl,--wrap=open64
+    -Wl,--wrap=openat
+    -Wl,--wrap=openat64
+    -Wl,--wrap=stat
+    -Wl,--wrap=lstat
+    -Wl,--wrap=fstatat
+    -Wl,--wrap=realpath
+    -Wl,--wrap=statx
+  )
+endif()
 
 if(FAISS_ENABLE_SVS)
   target_compile_definitions(faiss_test PRIVATE FAISS_ENABLE_SVS FAISS_SVS_RUNTIME_VERSION=${FAISS_SVS_RUNTIME_VERSION})
