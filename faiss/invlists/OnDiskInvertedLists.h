@@ -56,6 +56,10 @@ struct OnDiskOneList {
  * When it is known that a set of lists will be accessed, it is useful
  * to call prefetch_lists, that launches a set of threads to read the
  * lists in parallel.
+ *
+ * When read with read_index, the data file is only opened with
+ * IO_FLAG_ONDISK_SAME_DIR. It is mapped copy-on-write unless
+ * IO_FLAG_ONDISK_WRITABLE is also given.
  */
 struct OnDiskInvertedLists : InvertedLists {
     using List = OnDiskOneList;
@@ -77,6 +81,12 @@ struct OnDiskInvertedLists : InvertedLists {
     size_t totsize;
     uint8_t* ptr;   // mmap base pointer
     bool read_only; /// are inverted lists mapped read-only
+    /// file is mapped privately: modifications stay in memory and the file
+    /// is never written, truncated or created
+    bool copy_on_write;
+    /// descriptor of the data file once opened (-1 if none). All later
+    /// mappings and resizes go through it, never through filename.
+    int fd;
 
     OnDiskInvertedLists(size_t nlist, size_t code_size, const char* filename);
 

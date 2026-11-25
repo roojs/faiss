@@ -97,7 +97,8 @@ TEST(ONDISK, test_add) {
     }
 
     {
-        faiss::Index* index3 = faiss::read_index(filename2.c_str());
+        faiss::Index* index3 = faiss::read_index(
+                filename2.c_str(), faiss::IO_FLAG_ONDISK_SAME_DIR);
 
         std::vector<float> new_D(nq * k);
         std::vector<faiss::idx_t> new_I(nq * k);

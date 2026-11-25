@@ -17,7 +17,9 @@ def merge_ondisk(
     shift_ids=False,
 ) -> None:
     """Add the contents of the indexes stored in shard_fnames into the index
-    trained_index. The on-disk data is stored in ivfdata_fname"""
+    trained_index. The on-disk data is stored in ivfdata_fname. To load the
+    index written from trained_index, keep it in the same directory as
+    ivfdata_fname and read it with faiss.IO_FLAG_ONDISK_SAME_DIR."""
     assert not isinstance(
         trained_index, faiss.IndexIVFPQR
     ), "IndexIVFPQR is not supported as an on disk index."
