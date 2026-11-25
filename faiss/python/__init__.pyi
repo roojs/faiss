@@ -66,6 +66,7 @@ IO_FLAG_PQ_SKIP_SDC_TABLE: (
 )
 IO_FLAG_MMAP: int  # try to memmap data (useful to load as OnDiskInvertedLists)
 IO_FLAG_MMAP_IFC: int  # mmap for IndexFlatCodes-derived indices and HNSW
+IO_FLAG_ONDISK_WRITABLE: int  # map ondisk inverted lists read-write
 
 # EDEN scale type enum
 EDENScaleType_UNBIASED: Literal[1]

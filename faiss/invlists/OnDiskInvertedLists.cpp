@@ -14,6 +14,7 @@
 #include <memory>
 #include <unordered_set>
 
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -267,20 +268,27 @@ void OnDiskInvertedLists::prefetch_lists(const idx_t* list_nos, int n) const {
  **********************************************/
 
 void OnDiskInvertedLists::do_mmap() {
-    const char* rw_flags = read_only ? "r" : "r+";
     int prot = read_only ? PROT_READ : PROT_WRITE | PROT_READ;
-    FILE* f = fopen(filename.c_str(), rw_flags);
-    FAISS_THROW_IF_NOT_FMT(
-            f,
-            "could not open %s in mode %s: %s",
-            filename.c_str(),
-            rw_flags,
-            strerror(errno));
+    FILE* f = nullptr;
+    int map_fd = fd;
+    if (map_fd < 0) {
+        const char* rw_flags = read_only ? "r" : "r+";
+        f = fopen(filename.c_str(), rw_flags);
+        FAISS_THROW_IF_NOT_FMT(
+                f,
+                "could not open %s in mode %s: %s",
+                filename.c_str(),
+                rw_flags,
+                strerror(errno));
+        map_fd = fileno(f);
+    }
 
     uint8_t* ptro =
-            (uint8_t*)mmap(nullptr, totsize, prot, MAP_SHARED, fileno(f), 0);
+            (uint8_t*)mmap(nullptr, totsize, prot, MAP_SHARED, map_fd, 0);
 
-    fclose(f);
+    if (f != nullptr) {
+        fclose(f);
+    }
 
     FAISS_THROW_IF_NOT_FMT(
             ptro != MAP_FAILED,
@@ -296,7 +304,7 @@ void OnDiskInvertedLists::update_totsize(size_t new_size) {
         int err = munmap(ptr, totsize);
         FAISS_THROW_IF_NOT_FMT(err == 0, "munmap error: %s", strerror(errno));
     }
-    if (totsize == 0) {
+    if (totsize == 0 && fd < 0) {
         // must create file before truncating it
         FILE* f = fopen(filename.c_str(), "w");
         FAISS_THROW_IF_NOT_FMT(
@@ -323,7 +331,8 @@ void OnDiskInvertedLists::update_totsize(size_t new_size) {
     // create file
     printf("resizing %s to %zd bytes\n", filename.c_str(), totsize);
 
-    int err = truncate(filename.c_str(), totsize);
+    int err = fd >= 0 ? ftruncate(fd, totsize)
+                      : truncate(filename.c_str(), totsize);
 
     FAISS_THROW_IF_NOT_FMT(
             err == 0,
@@ -356,6 +365,7 @@ OnDiskInvertedLists::OnDiskInvertedLists(
           totsize(0),
           ptr(nullptr),
           read_only(false),
+          fd(-1),
           locks(new LockLevels()),
           pf(new OngoingPrefetch(this)),
           prefetch_nthread(32) {
@@ -375,6 +385,9 @@ OnDiskInvertedLists::~OnDiskInvertedLists() {
         if (err != 0) {
             fprintf(stderr, "munmap error: %s", strerror(errno));
         }
+    }
+    if (fd >= 0) {
+        close(fd);
     }
     delete locks;
 }
@@ -713,10 +726,121 @@ void OnDiskInvertedListsIOHook::write(const InvertedLists* ils, IOWriter* f)
     WRITE1(od->totsize);
 }
 
+namespace {
+
+// The data filename stored in an index is untrusted: only a single path
+// component is accepted, and it is resolved in the directory of the index file.
+std::string ondisk_data_basename(const std::string& stored, bool same_dir) {
+    std::string name = stored;
+    if (same_dir) {
+        size_t slash = name.find_last_of('/');
+        if (slash != std::string::npos) {
+            name = name.substr(slash + 1);
+        }
+    }
+    FAISS_THROW_IF_NOT_FMT(
+            !name.empty() && name != "." && name != ".." &&
+                    name.find('/') == std::string::npos &&
+                    name.find('\0') == std::string::npos,
+            "OnDiskInvertedLists: data filename \"%s\" stored in the index "
+            "must be a single path component (use IO_FLAG_ONDISK_SAME_DIR "
+            "to strip its directory)",
+            stored.c_str());
+    return name;
+}
+
+// Opens the data file once, relative to the directory of the index file and
+// without following symlinks. The returned descriptor is the only handle used
+// to access the data.
+int open_ondisk_data_file(IOReader* f, const std::string& name, bool writable) {
+    FileIOReader* reader = dynamic_cast<FileIOReader*>(f);
+    FAISS_THROW_IF_NOT_MSG(
+            reader && !reader->name.empty(),
+            "OnDiskInvertedLists can only be read from an index file given "
+            "by name");
+    const std::string& indexname = reader->name;
+    std::string dirname = ".";
+    size_t slash = indexname.find_last_of('/');
+    if (slash != std::string::npos) {
+        dirname = slash == 0 ? "/" : indexname.substr(0, slash);
+    }
+
+    int dirfd = open(dirname.c_str(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+    FAISS_THROW_IF_NOT_FMT(
+            dirfd >= 0,
+            "could not open directory %s: %s",
+            dirname.c_str(),
+            strerror(errno));
+    int fd = openat(
+            dirfd,
+            name.c_str(),
+            (writable ? O_RDWR : O_RDONLY) | O_NOFOLLOW | O_NONBLOCK |
+                    O_CLOEXEC);
+    int open_errno = errno;
+    close(dirfd);
+    FAISS_THROW_IF_NOT_FMT(
+            fd >= 0,
+            "could not open %s in directory %s: %s",
+            name.c_str(),
+            dirname.c_str(),
+            strerror(open_errno));
+
+    struct stat st;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+        close(fd);
+        FAISS_THROW_FMT(
+                "OnDiskInvertedLists data file %s is not a regular file",
+                name.c_str());
+    }
+    return fd;
+}
+
+void check_ondisk_layout(const OnDiskInvertedLists& od) {
+    size_t elem_size = add_no_overflow(
+            sizeof(idx_t), od.code_size, "OnDisk inverted list element");
+    for (size_t i = 0; i < od.lists.size(); i++) {
+        const OnDiskInvertedLists::List& l = od.lists[i];
+        if (l.offset == INVALID_OFFSET) {
+            FAISS_THROW_IF_NOT_FMT(
+                    l.size == 0,
+                    "OnDisk inverted list %zu has entries but no storage",
+                    i);
+            continue;
+        }
+        FAISS_THROW_IF_NOT_FMT(
+                l.size <= l.capacity,
+                "OnDisk inverted list %zu size %zu exceeds capacity %zu",
+                i,
+                l.size,
+                l.capacity);
+        size_t end = add_no_overflow(
+                l.offset,
+                mul_no_overflow(l.capacity, elem_size, "OnDisk inverted list"),
+                "OnDisk inverted list offset");
+        FAISS_THROW_IF_NOT_FMT(
+                end <= od.totsize,
+                "OnDisk inverted list %zu exceeds data size %zu",
+                i,
+                od.totsize);
+    }
+    for (const OnDiskInvertedLists::Slot& s : od.slots) {
+        size_t end = add_no_overflow(
+                s.offset, s.capacity, "OnDisk inverted list slot");
+        FAISS_THROW_IF_NOT_FMT(
+                end <= od.totsize,
+                "OnDisk inverted list slot exceeds data size %zu",
+                od.totsize);
+    }
+}
+
+} // namespace
+
 InvertedLists* OnDiskInvertedListsIOHook::read(IOReader* f, int io_flags)
         const {
     auto od = std::make_unique<OnDiskInvertedLists>();
-    od->read_only = io_flags & IO_FLAG_READ_ONLY;
+    bool skip_data = io_flags & IO_FLAG_SKIP_IVF_DATA;
+    od->read_only = !(io_flags & IO_FLAG_ONDISK_WRITABLE) ||
+            (io_flags & IO_FLAG_READ_ONLY) || skip_data;
     READ1(od->nlist);
     READ1(od->code_size);
     // this is a POD object
@@ -735,35 +859,25 @@ InvertedLists* OnDiskInvertedListsIOHook::read(IOReader* f, int io_flags)
         std::vector<char> x;
         READVECTOR(x);
         od->filename.assign(x.begin(), x.end());
-
-        if (io_flags & IO_FLAG_ONDISK_SAME_DIR) {
-            FileIOReader* reader = dynamic_cast<FileIOReader*>(f);
-            FAISS_THROW_IF_NOT_MSG(
-                    reader,
-                    "IO_FLAG_ONDISK_SAME_DIR only supported "
-                    "when reading from file");
-            std::string indexname = reader->name;
-            std::string dirname = "./";
-            size_t slash = indexname.find_last_of('/');
-            if (slash != std::string::npos) {
-                dirname = indexname.substr(0, slash + 1);
-            }
-            std::string filename = od->filename;
-            slash = filename.find_last_of('/');
-            if (slash != std::string::npos) {
-                filename = filename.substr(slash + 1);
-            }
-            filename = dirname + filename;
-            printf("IO_FLAG_ONDISK_SAME_DIR: "
-                   "updating ondisk filename from %s to %s\n",
-                   od->filename.c_str(),
-                   filename.c_str());
-            od->filename = filename;
-        }
     }
     READ1(od->totsize);
-    if (!(io_flags & IO_FLAG_SKIP_IVF_DATA)) {
+    if (!skip_data) {
+        od->filename = ondisk_data_basename(
+                od->filename, io_flags & IO_FLAG_ONDISK_SAME_DIR);
+        check_ondisk_layout(*od);
+        od->fd = open_ondisk_data_file(f, od->filename, !od->read_only);
+        struct stat st;
+        FAISS_THROW_IF_NOT_FMT(
+                fstat(od->fd, &st) == 0 &&
+                        static_cast<uint64_t>(st.st_size) >= od->totsize,
+                "OnDiskInvertedLists data file %s is smaller than %zu bytes",
+                od->filename.c_str(),
+                od->totsize);
         od->do_mmap();
+        if (od->read_only) {
+            close(od->fd);
+            od->fd = -1;
+        }
     }
     return od.release();
 }
