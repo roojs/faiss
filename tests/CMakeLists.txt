@@ -23,6 +23,7 @@ set(FAISS_TEST_SRC
   test_pqfs_unaligned.cpp
   test_common_ivf_empty_index.cpp
   test_ivf_early_termination.cpp
+  test_block_invlists_overflow.cpp
   test_utils.cpp
   test_hamming.cpp
   test_zerocopy.cpp
