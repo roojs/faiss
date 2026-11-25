@@ -12,7 +12,6 @@ security protections. It is not meant to be run on an untrusted network or
 in a production environment.
 """
 
-import importlib
 import os
 import pickle
 import sys
@@ -21,27 +20,42 @@ import traceback
 import socket
 import logging
 
+import numpy
+
+try:
+    from numpy._core import multiarray as _multiarray
+except ImportError:
+    from numpy.core import multiarray as _multiarray
+
 LOG = logging.getLogger(__name__)
 
 # default
 PORT = 12032
 
-safe_modules = {
-    "numpy",
-    "numpy.core.multiarray",
+# Exact globals needed to rebuild numpy arrays, scalars and dtypes pickled
+# with protocol 4. Never allow whole modules: numpy exposes functions such as
+# numpy.load and numpy.savetxt that read and write files and unpickle them.
+# numpy 1.x pickles reference numpy.core.multiarray, numpy 2.x
+# numpy._core.multiarray; both map to the same objects.
+safe_globals = {
+    ("numpy", "ndarray"): numpy.ndarray,
+    ("numpy", "dtype"): numpy.dtype,
+    ("numpy.core.multiarray", "_reconstruct"): _multiarray._reconstruct,
+    ("numpy.core.multiarray", "scalar"): _multiarray.scalar,
+    ("numpy._core.multiarray", "_reconstruct"): _multiarray._reconstruct,
+    ("numpy._core.multiarray", "scalar"): _multiarray.scalar,
 }
 
 
 class RestrictedUnpickler(pickle.Unpickler):
 
     def find_class(self, module, name):
-        # Only allow safe modules.
-        if module in safe_modules:
-            return getattr(importlib.import_module(module), name)
-        # Forbid everything else.
-        raise pickle.UnpicklingError(
-            "global '%s.%s' is forbidden" % (module, name)
-        )
+        try:
+            return safe_globals[(module, name)]
+        except KeyError:
+            raise pickle.UnpicklingError(
+                "global '%s.%s' is forbidden" % (module, name)
+            ) from None
 
 
 class FileSock:
