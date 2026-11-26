@@ -20,6 +20,7 @@ set(FAISS_TEST_SRC
   test_NSG_compressed_graph.cpp
   test_partitioning.cpp
   test_fastscan_perf.cpp
+  test_fastscan_codes_bounds.cpp
   test_pqfs_unaligned.cpp
   test_common_ivf_empty_index.cpp
   test_ivf_early_termination.cpp
