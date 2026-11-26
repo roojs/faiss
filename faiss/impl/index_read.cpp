@@ -907,6 +907,31 @@ static void validate_fastscan_fields(
     mul_no_overflow(ksub, M2, index_type);
 }
 
+// IVF fast-scan search walks each inverted list as roundup(list_size, bbs) /
+// bbs blocks of get_block_stride() bytes. BlockInvertedLists only checks its
+// codes against its own n_per_block and block_size, so those must match.
+static void validate_ivf_fastscan_invlists(
+        const IndexIVFFastScan& ivf,
+        const char* index_type) {
+    if (!ivf.invlists) {
+        return;
+    }
+    const auto* bil = dynamic_cast<const BlockInvertedLists*>(ivf.invlists);
+    FAISS_THROW_IF_NOT_FMT(
+            bil, "%s: inverted lists must be BlockInvertedLists", index_type);
+    const size_t block_stride = ivf.get_block_stride();
+    FAISS_THROW_IF_NOT_FMT(
+            bil->n_per_block == static_cast<size_t>(ivf.bbs) &&
+                    bil->block_size == block_stride,
+            "%s: inverted lists n_per_block=%zd block_size=%zd do not "
+            "match bbs=%d block stride=%zd",
+            index_type,
+            bil->n_per_block,
+            bil->block_size,
+            ivf.bbs,
+            block_stride);
+}
+
 // Validate that the AdditiveQuantizer dimension matches the index header
 // dimension.  compute_LUT() treats codebooks as a (d, total_codebook_size)
 // matrix and query vectors are sized for idx_d, so a mismatch leads to
@@ -2162,6 +2187,8 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 ivaqfs->ksub,
                 ivaqfs->bbs,
                 "IndexIVFAdditiveQuantizerFastScan");
+        validate_ivf_fastscan_invlists(
+                *ivaqfs, "IndexIVFAdditiveQuantizerFastScan");
 
         idx = std::move(ivaqfs);
     } else if (h == fourcc("IvFl") || h == fourcc("IvFL")) { // legacy
@@ -2955,10 +2982,45 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
         ivfsqfs->ksub = 16;
         ivfsqfs->init_code_packer();
 
+        // Fallback types keep full SQ codes in ArrayInvertedLists and search
+        // through IndexIVF; the others scan packed blocks.
+        if (!sq_fastscan::is_fallback(ivfsqfs->sq.qtype)) {
+            validate_fastscan_fields(
+                    ivfsqfs->M,
+                    ivfsqfs->M2,
+                    ivfsqfs->ksub,
+                    ivfsqfs->bbs,
+                    "IndexIVFSQFastScan");
+            validate_ivf_fastscan_invlists(*ivfsqfs, "IndexIVFSQFastScan");
+        }
+
         bool has_orig;
         READ1(has_orig);
         if (has_orig) {
             ivfsqfs->lo_codes_invlists = read_InvertedLists(f, io_flags);
+            // Rerank reads lo_codes at offsets of the packed lists, and
+            // range search reads the packed lists at offsets of lo_codes.
+            const InvertedLists* lo = ivfsqfs->lo_codes_invlists;
+            FAISS_THROW_IF_NOT_MSG(
+                    lo && ivfsqfs->invlists,
+                    "IndexIVFSQFastScan: lo_codes requires inverted lists");
+            FAISS_THROW_IF_NOT_FMT(
+                    lo->nlist == ivfsqfs->nlist &&
+                            lo->code_size == ivfsqfs->lo_code_size(),
+                    "IndexIVFSQFastScan: lo_codes nlist=%zd code_size=%zd "
+                    "do not match nlist=%zd lo_code_size=%zd",
+                    lo->nlist,
+                    lo->code_size,
+                    ivfsqfs->nlist,
+                    ivfsqfs->lo_code_size());
+            for (size_t list_no = 0; list_no < ivfsqfs->nlist; list_no++) {
+                FAISS_THROW_IF_NOT_FMT(
+                        lo->list_size(list_no) ==
+                                ivfsqfs->invlists->list_size(list_no),
+                        "IndexIVFSQFastScan: lo_codes list %zd size does not "
+                        "match inverted list",
+                        list_no);
+            }
             // Rebuild direct_map from lo_codes_invlists for reranking
             ivfsqfs->direct_map.set_type(
                     DirectMap::Hashtable, ivfsqfs->invlists, 0);
@@ -2975,6 +3037,10 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 }
             }
         }
+        FAISS_THROW_IF_NOT_MSG(
+                !sq_fastscan::needs_rerank(ivfsqfs->sq.qtype) ||
+                        !ivfsqfs->invlists || ivfsqfs->lo_codes_invlists,
+                "IndexIVFSQFastScan: reranked type requires lo_codes");
 
         idx = std::move(ivfsqfs);
 
@@ -3004,6 +3070,7 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
 
         validate_fastscan_fields(
                 ivpq->M, ivpq->M2, ivpq->ksub, ivpq->bbs, "IndexIVFPQFastScan");
+        validate_ivf_fastscan_invlists(*ivpq, "IndexIVFPQFastScan");
 
         idx = std::move(ivpq);
     } else if (h == fourcc("IRMf")) {
@@ -3435,6 +3502,18 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                             ivrqfs->rabitq.nb_bits, ivrqfs->d);
             const size_t new_block_stride = ivrqfs->get_block_stride();
 
+            // The migration copies a packed PQ4 block out of every bbs
+            // vectors of each list, stepping by the stored block_size.
+            FAISS_THROW_IF_NOT_FMT(
+                    bil->n_per_block == static_cast<size_t>(ivrqfs->bbs) &&
+                            bil->block_size >=
+                                    ((ivrqfs->M2 + 1) / 2) * ivrqfs->bbs,
+                    "IndexIVFRaBitQFastScan: legacy inverted lists "
+                    "n_per_block=%zd block_size=%zd do not match bbs=%d",
+                    bil->n_per_block,
+                    bil->block_size,
+                    ivrqfs->bbs);
+
             for (size_t list_no = 0; list_no < ivrqfs->nlist; list_no++) {
                 if (bil->list_size(list_no) == 0) {
                     continue;
@@ -3455,6 +3534,7 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 bil->block_size = new_block_stride;
             }
         }
+        validate_ivf_fastscan_invlists(*ivrqfs, "IndexIVFRaBitQFastScan");
 
         idx = std::move(ivrqfs);
     } else {
