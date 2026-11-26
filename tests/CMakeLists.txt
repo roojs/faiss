@@ -44,6 +44,7 @@ set(FAISS_TEST_SRC
 if(NOT WIN32)
   list(APPEND FAISS_TEST_SRC
     test_ondisk_ivf.cpp
+    test_ondisk_invlist_bounds.cpp
     test_disable_pq_sdc_tables.cpp
   )
 endif()
