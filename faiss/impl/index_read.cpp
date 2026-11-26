@@ -2406,8 +2406,13 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
         ivsp->vt = read_VectorTransform(f);
         ivsp->own_fields = true;
         READ1(ivsp->nbit);
+        FAISS_THROW_IF_NOT_FMT(
+                ivsp->nbit > 0 && ivsp->vt && ivsp->vt->d_out == ivsp->nbit,
+                "invalid IndexIVFSpectralHash nbit=%d (must be > 0 and "
+                "match the transform output dimension)",
+                ivsp->nbit);
         // not stored by write_ivf_header
-        ivsp->code_size = (ivsp->nbit + 7) / 8;
+        ivsp->code_size = (static_cast<size_t>(ivsp->nbit) + 7) / 8;
         READ1(ivsp->period);
         READ1(ivsp->threshold_type);
         READVECTOR(ivsp->trained);

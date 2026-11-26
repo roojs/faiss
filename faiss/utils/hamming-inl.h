@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <faiss/impl/FaissAssert.h>
+
 namespace faiss {
 
 // BitstringWriter and BitstringReader functions
@@ -16,7 +18,20 @@ inline BitstringWriter::BitstringWriter(uint8_t* code_in, size_t code_size_in)
 }
 
 inline void BitstringWriter::write(uint64_t x, int nbit) {
-    assert(code_size * 8 >= nbit + i);
+    FAISS_THROW_IF_NOT_FMT(
+            nbit >= 0 && nbit <= 64 && i <= code_size * 8 &&
+                    size_t(nbit) <= code_size * 8 - i,
+            "BitstringWriter: writing %d bits at bit %zd overflows "
+            "code_size=%zd",
+            nbit,
+            i,
+            code_size);
+    if (nbit == 0) {
+        return;
+    }
+    if (nbit < 64) {
+        x &= (uint64_t(1) << nbit) - 1;
+    }
     // nb of available bits in i / 8
     int na = 8 - (i & 7);
 
@@ -42,7 +57,17 @@ inline BitstringReader::BitstringReader(
         : code(code_in), code_size(code_size_in), i(0) {}
 
 inline uint64_t BitstringReader::read(int nbit) {
-    assert(code_size * 8 >= nbit + i);
+    FAISS_THROW_IF_NOT_FMT(
+            nbit >= 0 && nbit <= 64 && i <= code_size * 8 &&
+                    size_t(nbit) <= code_size * 8 - i,
+            "BitstringReader: reading %d bits at bit %zd overflows "
+            "code_size=%zd",
+            nbit,
+            i,
+            code_size);
+    if (nbit == 0) {
+        return 0;
+    }
     // nb of available bits in i / 8
     int na = 8 - (i & 7);
     // get available bits in current byte
