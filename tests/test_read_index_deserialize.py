@@ -218,7 +218,8 @@ def push_nndescent(buf, ntotal, d, K, has_built, final_graph):
 def push_rabitq(buf, d):
     """Append a minimal RaBitQuantizer (single-bit format)."""
     push_val(buf, SIZE_T, d)
-    push_val(buf, SIZE_T, 1)  # code_size
+    # code_size: 1-bit sign codes + SignBitFactors (2 floats)
+    push_val(buf, SIZE_T, (d + 7) // 8 + 8)
     push_val(buf, INT, 1)  # metric_type (L2)
 
 
