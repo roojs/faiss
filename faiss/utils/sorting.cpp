@@ -253,6 +253,20 @@ void bucket_sort_parallel(
         int64_t* lims,
         int64_t* perm,
         int nt_in) {
+    // exceptions cannot leave the parallel region below, so every value must
+    // be checked before it is used as a histogram index
+    size_t n_out_of_range = 0;
+#pragma omp parallel for num_threads(nt_in) reduction(+ : n_out_of_range)
+    for (int64_t i = 0; i < static_cast<int64_t>(nval); i++) {
+        if (!(vals[i] < vmax)) {
+            n_out_of_range++;
+        }
+    }
+    FAISS_THROW_IF_NOT_FMT(
+            n_out_of_range == 0,
+            "%zd values do not satisfy vals[i] < vmax",
+            n_out_of_range);
+
     memset(lims, 0, sizeof(*lims) * (vmax + 1));
 #pragma omp parallel num_threads(nt_in)
     {
@@ -344,7 +358,7 @@ void bucket_sort_inplace_ref(
 
     memset(lims, 0, sizeof(*lims) * (nbucket + 1));
     for (size_t i = 0; i < nval; i++) {
-        FAISS_THROW_IF_NOT(vals[i] < nbucket);
+        FAISS_THROW_IF_NOT(vals[i] >= 0 && vals[i] < nbucket);
         lims[vals[i] + 1]++;
     }
     double t1 = getmillisecs();
@@ -462,12 +476,27 @@ void bucket_sort_inplace_parallel(
         int64_t* lims,
         int nt_in) {
     int verbose = bucket_sort_verbose;
-    memset(lims, 0, sizeof(*lims) * (nbucket + 1));
-    std::vector<ToWrite<TI>> all_to_write;
     size_t nval = nrow * ncol;
     FAISS_THROW_IF_NOT(
             static_cast<size_t>(nbucket) <
             nval); // unclear what would happen in this case...
+
+    // exceptions cannot leave the parallel region below, so every value must
+    // be checked before it is used as a histogram or bucket index
+    size_t n_out_of_range = 0;
+#pragma omp parallel for num_threads(nt_in) reduction(+ : n_out_of_range)
+    for (int64_t i = 0; i < static_cast<int64_t>(nval); i++) {
+        if (!(vals[i] >= 0 && vals[i] < nbucket)) {
+            n_out_of_range++;
+        }
+    }
+    FAISS_THROW_IF_NOT_FMT(
+            n_out_of_range == 0,
+            "%zd values do not satisfy vals[i] >= 0 && vals[i] < nbucket",
+            n_out_of_range);
+
+    memset(lims, 0, sizeof(*lims) * (nbucket + 1));
+    std::vector<ToWrite<TI>> all_to_write;
 
     // try to keep size of all_to_write < 5GiB
     // but we need at least one element per bucket
