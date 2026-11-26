@@ -1504,6 +1504,29 @@ static void read_RaBitQuantizer(
             "RaBitQuantizer dimension mismatch: rabitq.d=%zu vs index d=%d",
             rabitq.d,
             expected_d);
+    FAISS_THROW_IF_NOT_FMT(
+            rabitq.nb_bits >= 1 && rabitq.nb_bits <= 9,
+            "invalid RaBitQ nb_bits=%zu",
+            rabitq.nb_bits);
+}
+
+static void validate_IndexRaBitQ_layout(IndexRaBitQ& idxq) {
+    const size_t expected_code_size =
+            idxq.rabitq.compute_code_size(idxq.d, idxq.rabitq.nb_bits);
+    validate_code_size_match(
+            idxq.rabitq.code_size, expected_code_size, "IndexRaBitQ quantizer");
+    idxq.code_size = expected_code_size;
+    FAISS_THROW_IF_NOT_MSG(
+            idxq.codes.size() ==
+                    mul_no_overflow(
+                            static_cast<size_t>(idxq.ntotal),
+                            idxq.code_size,
+                            "IndexRaBitQ codes"),
+            "IndexRaBitQ codes size mismatch");
+    FAISS_THROW_IF_NOT_MSG(
+            idxq.center.size() == static_cast<size_t>(idxq.d) ||
+                    (!idxq.is_trained && idxq.center.empty()),
+            "IndexRaBitQ center size mismatch");
 }
 
 static void read_EDENScalarQuantizer(
@@ -3082,6 +3105,37 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
 
         READVECTOR(idxqfs->codes);
 
+        idxqfs->code_size = idxqfs->rabitq.compute_code_size(
+                idxqfs->d, idxqfs->rabitq.nb_bits);
+        idxqfs->rabitq.code_size = idxqfs->code_size;
+        FAISS_THROW_IF_NOT_MSG(
+                idxqfs->center.size() == static_cast<size_t>(idxqfs->d),
+                "IndexRaBitQFastScan center size mismatch");
+        {
+            const size_t ntotal = static_cast<size_t>(idxqfs->ntotal);
+            const size_t bbs = static_cast<size_t>(idxqfs->bbs);
+            const size_t n_blocks = ntotal / bbs + (ntotal % bbs != 0);
+            FAISS_THROW_IF_NOT_MSG(
+                    idxqfs->ntotal2 ==
+                            mul_no_overflow(
+                                    n_blocks,
+                                    bbs,
+                                    "IndexRaBitQFastScan ntotal2"),
+                    "IndexRaBitQFastScan ntotal2 mismatch");
+            // Legacy codes hold only the packed sign bits; the migration
+            // below widens each block to the current stride.
+            const size_t stored_block_stride = is_legacy
+                    ? ((idxqfs->M2 + 1) / 2) * bbs
+                    : idxqfs->get_block_stride();
+            FAISS_THROW_IF_NOT_MSG(
+                    idxqfs->codes.size() >=
+                            mul_no_overflow(
+                                    n_blocks,
+                                    stored_block_stride,
+                                    "IndexRaBitQFastScan codes"),
+                    "IndexRaBitQFastScan codes size mismatch");
+        }
+
         if (is_legacy) {
             const size_t storage_size =
                     rabitq_utils::compute_per_vector_storage_size(
@@ -3120,7 +3174,7 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 idxq->qb);
 
         // rabitq.nb_bits is already set to 1 by read_RaBitQuantizer
-        idxq->code_size = idxq->rabitq.code_size;
+        validate_IndexRaBitQ_layout(*idxq);
         idx = std::move(idxq);
     } else if (h == fourcc("Ixrr")) {
         // Ixrr = multi-bit format (new)
@@ -3138,7 +3192,7 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 "invalid RaBitQ qb=%d (must be in [0, 8])",
                 idxq->qb);
 
-        idxq->code_size = idxq->rabitq.code_size;
+        validate_IndexRaBitQ_layout(*idxq);
         idx = std::move(idxq);
     } else if (h == fourcc("Iwrq")) {
         auto ivrq = std::make_unique<IndexIVFRaBitQ>();
