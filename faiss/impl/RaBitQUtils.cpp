@@ -266,6 +266,18 @@ QueryFactorsData compute_query_factors(
     return query_factors;
 }
 
+const float* centroid_or_null(const std::vector<float>& center, size_t d) {
+    if (center.empty()) {
+        return nullptr;
+    }
+    FAISS_THROW_IF_NOT_FMT(
+            center.size() == d,
+            "RaBitQ center size %zu != d %zu",
+            center.size(),
+            d);
+    return center.data();
+}
+
 bool extract_bit_standard(const uint8_t* code, size_t bit_index) {
     const size_t byte_idx = bit_index / 8;
     const size_t bit_offset = bit_index % 8;

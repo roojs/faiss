@@ -198,6 +198,15 @@ QueryFactorsData compute_query_factors(
         std::vector<float>& rotated_q,
         std::vector<uint8_t>& rotated_qq);
 
+/** Return the centroid pointer to pass to the functions above.
+ * An empty centroid means no centering and yields nullptr. A non-empty
+ * centroid is read for d floats, so any other length throws.
+ *
+ * @param center        index centroid
+ * @param d             dimensionality
+ */
+const float* centroid_or_null(const std::vector<float>& center, size_t d);
+
 /** Extract bit value from RaBitQ code in standard format.
  * Used by IndexRaBitQ which stores bits sequentially.
  *

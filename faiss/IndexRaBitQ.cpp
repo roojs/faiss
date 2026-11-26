@@ -53,17 +53,18 @@ void IndexRaBitQ::train(idx_t n, const float* x) {
 
 void IndexRaBitQ::sa_encode(idx_t n, const float* x, uint8_t* bytes) const {
     FAISS_THROW_IF_NOT(is_trained);
-    rabitq.compute_codes_core(x, bytes, n, center.data());
+    rabitq.compute_codes_core(
+            x, bytes, n, rabitq_utils::centroid_or_null(center, d));
 }
 
 void IndexRaBitQ::sa_decode(idx_t n, const uint8_t* bytes, float* x) const {
     FAISS_THROW_IF_NOT(is_trained);
-    rabitq.decode_core(bytes, x, n, center.data());
+    rabitq.decode_core(bytes, x, n, rabitq_utils::centroid_or_null(center, d));
 }
 
 FlatCodesDistanceComputer* IndexRaBitQ::get_FlatCodesDistanceComputer() const {
-    FlatCodesDistanceComputer* dc =
-            rabitq.get_distance_computer(qb, center.data(), centered);
+    FlatCodesDistanceComputer* dc = rabitq.get_distance_computer(
+            qb, rabitq_utils::centroid_or_null(center, d), centered);
     dc->code_size = rabitq.code_size;
     dc->codes = codes.data();
     return dc;
@@ -72,8 +73,8 @@ FlatCodesDistanceComputer* IndexRaBitQ::get_FlatCodesDistanceComputer() const {
 FlatCodesDistanceComputer* IndexRaBitQ::get_quantized_distance_computer(
         const uint8_t qb_in,
         bool centered_in) const {
-    FlatCodesDistanceComputer* dc =
-            rabitq.get_distance_computer(qb_in, center.data(), centered_in);
+    FlatCodesDistanceComputer* dc = rabitq.get_distance_computer(
+            qb_in, rabitq_utils::centroid_or_null(center, d), centered_in);
     dc->code_size = rabitq.code_size;
     dc->codes = codes.data();
     return dc;
@@ -95,6 +96,9 @@ struct Run_search_with_dc_res {
                 typename BlockResultHandler::SingleResultHandler;
         const int d = index->d;
         size_t ex_bits = nb_bits - 1;
+        // Distance computers are built inside the OpenMP region, which
+        // cannot throw.
+        rabitq_utils::centroid_or_null(index->center, d);
 
 #pragma omp parallel
         {

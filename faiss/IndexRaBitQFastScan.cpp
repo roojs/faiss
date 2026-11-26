@@ -294,7 +294,7 @@ void IndexRaBitQFastScan::compute_codes(
     }
 
     // Hoist loop-invariant computations
-    const float* centroid_data = center.data();
+    const float* centroid_data = rabitq_utils::centroid_or_null(center, d);
     const size_t bit_pattern_size = (d + 7) / 8;
     const size_t ex_bits = rabitq.nb_bits - 1;
     const size_t ex_code_size = (d * ex_bits + 7) / 8;
@@ -378,7 +378,7 @@ void IndexRaBitQFastScan::compute_float_LUT(
                 rabitq_utils::compute_query_factors(
                         query,
                         d,
-                        center.data(),
+                        rabitq_utils::centroid_or_null(center, d),
                         qb,
                         centered,
                         metric_type,
@@ -473,8 +473,7 @@ size_t IndexRaBitQFastScan::fast_scan_code_size() const {
 
 void IndexRaBitQFastScan::sa_decode(idx_t n, const uint8_t* bytes, float* x)
         const {
-    const float* centroid_in =
-            (center.data() == nullptr) ? nullptr : center.data();
+    const float* centroid_in = rabitq_utils::centroid_or_null(center, d);
     const uint8_t* input_codes = bytes;
     FAISS_ASSERT(input_codes != nullptr);
     FAISS_ASSERT(x != nullptr);
@@ -512,6 +511,10 @@ void IndexRaBitQFastScan::search(
         float* distances,
         idx_t* labels,
         const SearchParameters* params) const {
+    FAISS_THROW_IF_NOT(is_trained);
+    // LUT construction may run inside an OpenMP region, which cannot throw.
+    rabitq_utils::centroid_or_null(center, d);
+
     // The kernel applies the selector after each SIMD block.
     const IDSelector* rabitq_sel = params ? params->sel : nullptr;
 
