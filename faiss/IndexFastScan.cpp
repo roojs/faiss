@@ -113,6 +113,28 @@ size_t IndexFastScan::get_block_stride() const {
     return packer->block_size;
 }
 
+void IndexFastScan::check_codes_size() const {
+    FAISS_THROW_IF_NOT_FMT(
+            bbs > 0 && ntotal2 % bbs == 0,
+            "IndexFastScan: ntotal2=%zd is not a multiple of bbs=%d",
+            ntotal2,
+            bbs);
+    FAISS_THROW_IF_NOT_FMT(
+            ntotal >= 0 && static_cast<size_t>(ntotal) <= ntotal2,
+            "IndexFastScan: ntotal=%zd exceeds ntotal2=%zd",
+            static_cast<size_t>(ntotal),
+            ntotal2);
+    size_t required = mul_no_overflow(
+            ntotal2 / bbs, get_block_stride(), "IndexFastScan codes");
+    FAISS_THROW_IF_NOT_FMT(
+            codes.size() >= required,
+            "IndexFastScan: packed codes size %zd too small for ntotal2=%zd "
+            "(need %zd)",
+            codes.size(),
+            ntotal2,
+            required);
+}
+
 size_t IndexFastScan::remove_ids(const IDSelector& sel) {
     idx_t j = 0;
     std::vector<uint8_t> buffer(code_size);
@@ -300,6 +322,8 @@ void IndexFastScan::search_dispatch_implem(
     if (n == 0) {
         return;
     }
+
+    check_codes_size();
 
     // actual implementation used
     int impl = implem;

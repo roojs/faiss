@@ -21,6 +21,7 @@
 #include <faiss/impl/FaissAssert.h>
 #include <faiss/impl/RaBitQUtils.h>
 #include <faiss/impl/io.h>
+#include <faiss/impl/sq_fastscan_utils.h>
 #include <faiss/utils/hamming.h>
 
 #include <faiss/invlists/InvertedListsIOHook.h>
@@ -2096,6 +2097,7 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 idxaqfs->ksub,
                 idxaqfs->bbs,
                 "IndexAdditiveQuantizerFastScan");
+        idxaqfs->check_codes_size();
 
         idx = std::move(idxaqfs);
     } else if (
@@ -2889,6 +2891,22 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 idxsqfs->ksub,
                 idxsqfs->bbs,
                 "IndexSQFastScan");
+        idxsqfs->check_codes_size();
+
+        // Search reads lo_codes for every id < ntotal when the type is
+        // reranked; reconstruct does so whenever lo_codes is non-empty.
+        if (sq_fastscan::needs_rerank(idxsqfs->sq.qtype) ||
+            !idxsqfs->lo_codes.empty()) {
+            const size_t lo_required = mul_no_overflow(
+                    static_cast<size_t>(idxsqfs->ntotal),
+                    sq_fastscan::sq_rerank_size(idxsqfs->d, idxsqfs->sq.qtype),
+                    "IndexSQFastScan lo_codes");
+            FAISS_THROW_IF_NOT_FMT(
+                    idxsqfs->lo_codes.size() >= lo_required,
+                    "IndexSQFastScan: lo_codes size %zd too small (need %zd)",
+                    idxsqfs->lo_codes.size(),
+                    lo_required);
+        }
 
         idx = std::move(idxsqfs);
 
@@ -2916,6 +2934,7 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 idxpqfs->ksub,
                 idxpqfs->bbs,
                 "IndexPQFastScan");
+        idxpqfs->check_codes_size();
 
         idx = std::move(idxpqfs);
 
@@ -3092,6 +3111,24 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                             static_cast<size_t>(idxqfs->ntotal) * storage_size,
                     "legacy flat_storage size mismatch during migration");
 
+            // Legacy codes hold only the packed PQ4 blocks; the migration
+            // copies one such block per bbs vectors out of them.
+            const size_t legacy_block_size =
+                    ((idxqfs->M2 + 1) / 2) * idxqfs->bbs;
+            FAISS_THROW_IF_NOT_FMT(
+                    idxqfs->ntotal >= 0 &&
+                            mul_no_overflow(
+                                    (static_cast<size_t>(idxqfs->ntotal) +
+                                     idxqfs->bbs - 1) /
+                                            idxqfs->bbs,
+                                    legacy_block_size,
+                                    "IndexRaBitQFastScan legacy codes") <=
+                                    idxqfs->codes.size(),
+                    "IndexRaBitQFastScan: legacy packed codes size %zd too "
+                    "small for ntotal=%" PRId64,
+                    idxqfs->codes.size(),
+                    idxqfs->ntotal);
+
             rabitq_utils::populate_block_aux_from_flat_storage(
                     legacy_flat_storage,
                     idxqfs->codes,
@@ -3102,6 +3139,7 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                     idxqfs->get_block_stride(),
                     storage_size);
         }
+        idxqfs->check_codes_size();
 
         idx = std::move(idxqfs);
     } else if (h == fourcc("Ixrq")) {

@@ -218,6 +218,12 @@ struct IndexFastScan : Index {
      */
     size_t get_block_stride() const;
 
+    /** Check that ntotal2 is a multiple of bbs that covers ntotal and that
+     * the packed codes hold every block of ntotal2 that search scans.
+     * Throws otherwise.
+     */
+    void check_codes_size() const;
+
     /** Merge another index into this one
      *
      * @param otherIndex  index to merge from
