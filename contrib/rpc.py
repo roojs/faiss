@@ -5,7 +5,7 @@
 
 """
 Simplistic RPC implementation.
-Exposes all functions of a Server object.
+Exposes the public methods defined by subclasses of Server.
 
 This code is for demonstration purposes only, and does not include certain
 security protections. It is not meant to be run on an untrusted network or
@@ -13,7 +13,6 @@ in a production environment.
 """
 
 import importlib
-import os
 import pickle
 import sys
 import _thread
@@ -113,6 +112,24 @@ class Server:
     def log(self, s):
         self.logf.write("Server log %s: %s\n" % (self.log_prefix, s))
 
+    def _lookup_method(self, fname):
+        """Return the callable a client may invoke as fname, or None.
+
+        Private names and the protocol methods defined on Server itself
+        are never callable by a remote client.
+        """
+        if (
+            not isinstance(fname, str)
+            or fname.startswith("_")
+            or hasattr(Server, fname)
+        ):
+            return None
+        try:
+            f = getattr(self, fname)
+        except AttributeError:
+            return None
+        return f if callable(f) else None
+
     def one_function(self):
         """
         Executes a single function with associated I/O.
@@ -131,29 +148,28 @@ class Server:
             (fname, args) = RestrictedUnpickler(self.fs).load()
         except EOFError:
             raise ClientExit("read args")
-        self.log("executing method %s" % (fname))
         st = None
         ret = None
-        try:
-            f = getattr(self, fname)
-        except AttributeError:
-            st = AttributeError("unknown method " + fname)
+        f = self._lookup_method(fname)
+        if f is None:
+            st = "unknown method %r" % (fname,)
             self.log("unknown method")
+        else:
+            self.log("executing method %s" % fname)
+            try:
+                ret = f(*args)
+            except Exception as e:
+                # due to a bug (in mod_python?), ServerException cannot be
+                # unpickled, so send the string and make the exception on the
+                # client side
 
-        try:
-            ret = f(*args)
-        except Exception as e:
-            # due to a bug (in mod_python?), ServerException cannot be
-            # unpickled, so send the string and make the exception on the
-            # client side
-
-            # st=ServerException(
-            #  "".join(traceback.format_tb(sys.exc_info()[2]))+
-            #  str(e))
-            st = "".join(traceback.format_tb(sys.exc_info()[2])) + str(e)
-            self.log("exception in method")
-            traceback.print_exc(50, self.logf)
-            self.logf.flush()
+                # st=ServerException(
+                #  "".join(traceback.format_tb(sys.exc_info()[2]))+
+                #  str(e))
+                st = "".join(traceback.format_tb(sys.exc_info()[2])) + str(e)
+                self.log("exception in method")
+                traceback.print_exc(50, self.logf)
+                self.logf.flush()
 
         LOG.info("return")
         try:
@@ -185,22 +201,6 @@ class Server:
 
     def exec_loop_cleanup(self):
         pass
-
-    ###################################################################
-    # spying stuff
-
-    def get_ps_stats(self):
-        ret = ""
-        f = os.popen(
-            "echo ============ `hostname` uptime:; uptime;"
-            + "echo ============ self:; "
-            + "ps -p %d -o pid,vsize,rss,%%cpu,nlwp,psr; " % os.getpid()
-            + "echo ============ run queue:;"
-            + "ps ar -o user,pid,%cpu,%mem,ni,nlwp,psr,vsz,rss,cputime,command"
-        )
-        for l in f:
-            ret += l
-        return ret
 
 
 class Client:
