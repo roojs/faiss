@@ -6,6 +6,7 @@
  */
 
 #include <faiss/impl/zerocopy_io.h>
+#include <algorithm>
 #include <cstring>
 
 namespace faiss {
@@ -20,12 +21,9 @@ size_t ZeroCopyIOReader::get_data_view(void** ptr, size_t size, size_t nitems) {
         return nitems;
     }
 
-    size_t actual_size = size * nitems;
-    if (rp_ + size * nitems > total_) {
-        actual_size = total_ - rp_;
-    }
-
-    size_t actual_nitems = (actual_size + size - 1) / size;
+    // only whole items that end inside the buffer
+    const size_t remaining = rp_ < total_ ? total_ - rp_ : 0;
+    const size_t actual_nitems = std::min(nitems, remaining / size);
     if (actual_nitems == 0) {
         return 0;
     }
