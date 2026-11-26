@@ -13,6 +13,22 @@
 
 namespace faiss {
 
+namespace {
+
+const float* eden_centroid_or_null(const std::vector<float>& center, idx_t d) {
+    if (center.empty()) {
+        return nullptr;
+    }
+    FAISS_THROW_IF_NOT_FMT(
+            center.size() == static_cast<size_t>(d),
+            "IndexEDEN center size %zu != d %zu",
+            center.size(),
+            static_cast<size_t>(d));
+    return center.data();
+}
+
+} // namespace
+
 IndexEDEN::IndexEDEN() = default;
 
 IndexEDEN::IndexEDEN(
@@ -54,17 +70,23 @@ void IndexEDEN::train(idx_t n, const float* x) {
 void IndexEDEN::sa_encode(idx_t n, const float* x, uint8_t* bytes) const {
     FAISS_THROW_IF_NOT(is_trained);
     eden_utils::compute_codes(
-            sq, metric_type, scale_type, x, bytes, n, center.data());
+            sq,
+            metric_type,
+            scale_type,
+            x,
+            bytes,
+            n,
+            eden_centroid_or_null(center, d));
 }
 
 void IndexEDEN::sa_decode(idx_t n, const uint8_t* bytes, float* x) const {
     FAISS_THROW_IF_NOT(is_trained);
-    eden_utils::decode(sq, bytes, x, n, center.data());
+    eden_utils::decode(sq, bytes, x, n, eden_centroid_or_null(center, d));
 }
 
 FlatCodesDistanceComputer* IndexEDEN::get_FlatCodesDistanceComputer() const {
-    FlatCodesDistanceComputer* dc =
-            eden_utils::get_distance_computer(sq, metric_type, center.data());
+    FlatCodesDistanceComputer* dc = eden_utils::get_distance_computer(
+            sq, metric_type, eden_centroid_or_null(center, d));
     dc->code_size = code_size;
     dc->codes = codes.data();
     return dc;
@@ -97,14 +119,14 @@ struct Run_search_with_eden_dc {
                 typename BlockResultHandler::SingleResultHandler;
         const int d = index->d;
         const bool use_batch_scan = use_eden_batch_scan(d, index->sq.bits);
+        // Validated before the OpenMP region, which cannot throw.
+        const float* centroid = eden_centroid_or_null(index->center, d);
 
 #pragma omp parallel
         {
             std::unique_ptr<EDENFlatCodesDistanceComputer> dc(
                     eden_utils::get_distance_computer(
-                            index->sq,
-                            index->metric_type,
-                            index->center.data()));
+                            index->sq, index->metric_type, centroid));
             dc->code_size = index->code_size;
             dc->codes = index->codes.data();
             SingleResultHandler resi(res);

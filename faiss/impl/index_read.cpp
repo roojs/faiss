@@ -3015,6 +3015,12 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 h == fourcc("IxEe"));
         READVECTOR(idxe->codes);
         READVECTOR(idxe->center);
+        FAISS_THROW_IF_NOT_FMT(
+                !idxe->is_trained ||
+                        idxe->center.size() == static_cast<size_t>(idxe->d),
+                "IndexEDEN center size %zu != d %d",
+                idxe->center.size(),
+                idxe->d);
 
         idxe->code_size = eden_utils::code_size(idxe->d, idxe->sq.bits);
         FAISS_THROW_IF_NOT(
@@ -3051,6 +3057,12 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
         read_index_header(*idxqfs, f);
         read_RaBitQuantizer(idxqfs->rabitq, f, idxqfs->d, true);
         READVECTOR(idxqfs->center);
+        FAISS_THROW_IF_NOT_FMT(
+                !idxqfs->is_trained ||
+                        idxqfs->center.size() == static_cast<size_t>(idxqfs->d),
+                "IndexRaBitQFastScan center size %zu != d %d",
+                idxqfs->center.size(),
+                idxqfs->d);
         READ1(idxqfs->qb);
         FAISS_THROW_IF_NOT_FMT(
                 idxqfs->qb > 0 && idxqfs->qb <= 8,
@@ -3111,6 +3123,12 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
         read_RaBitQuantizer(idxq->rabitq, f, idxq->d, false);
         read_vector(idxq->codes, f);
         READVECTOR(idxq->center);
+        FAISS_THROW_IF_NOT_FMT(
+                !idxq->is_trained ||
+                        idxq->center.size() == static_cast<size_t>(idxq->d),
+                "IndexRaBitQ center size %zu != d %d",
+                idxq->center.size(),
+                idxq->d);
         READ1(idxq->qb);
         // qb=0: Not quantized - direct distance computation on given float32s.
         // qb>0 && qb<=8: Scalar-quantized with qb bits of precision.
@@ -3130,6 +3148,12 @@ std::unique_ptr<Index> read_index_up(IOReader* f, int io_flags) {
                 idxq->rabitq, f, idxq->d, true); // Reads nb_bits from file
         read_vector(idxq->codes, f);
         READVECTOR(idxq->center);
+        FAISS_THROW_IF_NOT_FMT(
+                !idxq->is_trained ||
+                        idxq->center.size() == static_cast<size_t>(idxq->d),
+                "IndexRaBitQ center size %zu != d %d",
+                idxq->center.size(),
+                idxq->d);
         READ1(idxq->qb);
         // qb=0: Not quantized - direct distance computation on given float32s.
         // qb>0 && qb<=8: Scalar-quantized with qb bits of precision.
